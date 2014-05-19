@@ -26,7 +26,7 @@ conf = openerp.tools.config
 # Path to the OpenERP Addons repository (comma-separated for
 # multiple locations)
 
-conf['addons_path'] = '../../addons/trunk,../../web/trunk/addons'
+conf['addons_path'] = '/opt/odoo/odoo.git/addons,/opt/odoo/custom.git'
 
 # Optional database config if not using local socket
 #conf['db_name'] = 'mycompany'
