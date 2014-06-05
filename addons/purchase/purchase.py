@@ -192,7 +192,7 @@ class purchase_order(osv.osv):
         'picking_ids': fields.one2many('stock.picking.in', 'purchase_id', 'Picking List', readonly=True, help="This is the list of incoming shipments that have been generated for this purchase order."),
         'shipped':fields.boolean('Received', readonly=True, select=True, help="It indicates that a picking has been done"),
         'shipped_rate': fields.function(_shipped_rate, string='Received Ratio', type='float'),
-        'invoiced': fields.function(_invoiced, string='Invoice Received', type='boolean', help="It indicates that an invoice has been paid"),
+        'invoiced': fields.function(_invoiced, string='Invoice Received', type='boolean', help="It indicates that an invoice has been validated"),
         'invoiced_rate': fields.function(_invoiced_rate, string='Invoiced', type='float'),
         'invoice_method': fields.selection([('manual','Based on Purchase Order lines'),('order','Based on generated draft invoice'),('picking','Based on incoming shipments')], 'Invoicing Control', required=True,
             readonly=True, states={'draft':[('readonly',False)], 'sent':[('readonly',False)]},
@@ -498,6 +498,8 @@ class purchase_order(osv.osv):
         if not len(ids):
             return False
         self.write(cr, uid, ids, {'state':'draft','shipped':0})
+        for purchase in self.browse(cr, uid, ids, context=context):
+            self.pool['purchase.order.line'].write(cr, uid, [l.id for l in  purchase.order_line], {'state': 'draft'})
         for p_id in ids:
             # Deleting the existing instance of workflow for PO
             self.delete_workflow(cr, uid, [p_id]) # TODO is it necessary to interleave the calls?
@@ -593,6 +595,8 @@ class purchase_order(osv.osv):
                         _('You must first cancel all receptions related to this purchase order.'))
             self.pool.get('account.invoice') \
                 .signal_invoice_cancel(cr, uid, map(attrgetter('id'), purchase.invoice_ids))
+            self.pool['purchase.order.line'].write(cr, uid, [l.id for l in  purchase.order_line],
+                    {'state': 'cancel'})
         self.write(cr,uid,ids,{'state':'cancel'})
 
         self.signal_purchase_cancel(cr, uid, ids)
@@ -903,6 +907,8 @@ class purchase_order_line(osv.osv):
     def unlink(self, cr, uid, ids, context=None):
         procurement_ids_to_cancel = []
         for line in self.browse(cr, uid, ids, context=context):
+            if line.state not in ['draft', 'cancel']:
+                raise osv.except_osv(_('Invalid Action!'), _('Cannot delete a purchase order line which is in state \'%s\'.') %(line.state,))
             if line.move_dest_id:
                 procurement_ids_to_cancel.extend(procurement.id for procurement in line.move_dest_id.procurements)
         if procurement_ids_to_cancel:
