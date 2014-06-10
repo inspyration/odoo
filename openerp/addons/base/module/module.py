@@ -144,6 +144,15 @@ class module(osv.osv):
     _rec_name = "shortdesc"
     _description = "Module"
 
+    def fields_view_get(self, cr, uid, view_id=None, view_type='form', context=None, toolbar=False, submenu=False):
+         res = super(module, self).fields_view_get(cr, uid, view_id=view_id, view_type=view_type, context=context, toolbar=toolbar, submenu=False)
+         result = self.pool.get('ir.model.data').get_object_reference(cr, uid, 'base', 'action_server_module_immediate_install')[1]
+         if view_type == 'form':
+             if res.get('toolbar',False):
+                 list = [rec for rec in res['toolbar']['action'] if rec.get('id', False) != result]
+                 res['toolbar'] = {'action': list}
+         return res
+
     @classmethod
     def get_module_info(cls, name):
         info = {}
@@ -436,11 +445,7 @@ class module(osv.osv):
         including the deletion of all database structures created by the module:
         tables, columns, constraints, etc."""
         ir_model_data = self.pool.get('ir.model.data')
-        ir_model_constraint = self.pool.get('ir.model.constraint')
         modules_to_remove = [m.name for m in self.browse(cr, uid, ids, context)]
-        modules_to_remove_ids = [m.id for m in self.browse(cr, uid, ids, context)]
-        constraint_ids = ir_model_constraint.search(cr, uid, [('module', 'in', modules_to_remove_ids)])
-        ir_model_constraint._module_data_uninstall(cr, uid, constraint_ids, context)
         ir_model_data._module_data_uninstall(cr, uid, modules_to_remove, context)
         self.write(cr, uid, ids, {'state': 'uninstalled'})
         return True

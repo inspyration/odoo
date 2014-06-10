@@ -360,6 +360,10 @@ class mail_thread(osv.AbstractModel):
         if context is None:
             context = {}
 
+        if context.get('tracking_disable'):
+            return super(mail_thread, self).create(
+                cr, uid, values, context=context)
+
         # subscribe uid unless asked not to
         if not context.get('mail_create_nosubscribe'):
             pid = self.pool['res.users'].browse(cr, SUPERUSER_ID, uid).partner_id.id
@@ -386,7 +390,7 @@ class mail_thread(osv.AbstractModel):
         if not context.get('mail_notrack'):
             tracked_fields = self._get_tracked_fields(cr, uid, values.keys(), context=track_ctx)
             if tracked_fields:
-                initial_values = {thread_id: dict((item, False) for item in tracked_fields)}
+                initial_values = {thread_id: dict.fromkeys(tracked_fields, False)}
                 self.message_track(cr, uid, [thread_id], tracked_fields, initial_values, context=track_ctx)
         return thread_id
 
@@ -395,29 +399,31 @@ class mail_thread(osv.AbstractModel):
             context = {}
         if isinstance(ids, (int, long)):
             ids = [ids]
+        if context.get('tracking_disable'):
+            return super(mail_thread, self).write(
+                cr, uid, ids, values, context=context)
         # Track initial values of tracked fields
         track_ctx = dict(context)
         if 'lang' not in track_ctx:
             track_ctx['lang'] = self.pool.get('res.users').browse(cr, uid, uid, context=context).lang
+
+        tracked_fields = None
         if not context.get('mail_notrack'):
             tracked_fields = self._get_tracked_fields(cr, uid, values.keys(), context=track_ctx)
-        else:
-            tracked_fields = []
+
         if tracked_fields:
             records = self.browse(cr, uid, ids, context=track_ctx)
-            initial_values = dict((this.id, dict((key, getattr(this, key)) for key in tracked_fields.keys())) for this in records)
+            initial_values = dict((record.id, dict((key, getattr(record, key)) for key in tracked_fields))
+                                  for record in records)
 
         # Perform write, update followers
         result = super(mail_thread, self).write(cr, uid, ids, values, context=context)
         self.message_auto_subscribe(cr, uid, ids, values.keys(), context=context, values=values)
 
-        if not context.get('mail_notrack'):
-            # Perform the tracking
-            tracked_fields = self._get_tracked_fields(cr, uid, values.keys(), context=context)
-        else:
-            tracked_fields = None
+        # Perform the tracking
         if tracked_fields:
             self.message_track(cr, uid, ids, tracked_fields, initial_values, context=track_ctx)
+
         return result
 
     def unlink(self, cr, uid, ids, context=None):
@@ -454,14 +460,15 @@ class mail_thread(osv.AbstractModel):
             :return list: a list of (field_name, column_info obj), containing
                 always tracked fields and modified on_change fields
         """
-        lst = []
+        tracked_fields = []
         for name, column_info in self._all_columns.items():
             visibility = getattr(column_info.column, 'track_visibility', False)
             if visibility == 'always' or (visibility == 'onchange' and name in updated_fields) or name in self._track:
-                lst.append(name)
-        if not lst:
-            return lst
-        return self.fields_get(cr, uid, lst, context=context)
+                tracked_fields.append(name)
+
+        if tracked_fields:
+            return self.fields_get(cr, uid, tracked_fields, context=context)
+        return {}
 
     def message_track(self, cr, uid, ids, tracked_fields, initial_values, context=None):
 
@@ -707,7 +714,7 @@ class mail_thread(osv.AbstractModel):
         s = ', '.join([decode(message.get(h)) for h in header_fields if message.get(h)])
         return filter(lambda x: x, self._find_partner_from_emails(cr, uid, None, tools.email_split(s), context=context))
 
-    def message_route_verify(self, cr, uid, message, message_dict, route, update_author=True, assert_model=True, create_fallback=True, context=None):
+    def message_route_verify(self, cr, uid, message, message_dict, route, update_author=True, assert_model=True, create_fallback=True, allow_private=False, context=None):
         """ Verify route validity. Check and rules:
             1 - if thread_id -> check that document effectively exists; otherwise
                 fallback on a message_new by resetting thread_id
@@ -828,6 +835,9 @@ class mail_thread(osv.AbstractModel):
             _create_bounce_email()
             return ()
 
+        if not model and not thread_id and not alias and not allow_private:
+            return ()
+
         return (model, thread_id, route[2], route[3], route[4])
 
     def message_route(self, cr, uid, message, message_dict, model=None, thread_id=None,
@@ -933,7 +943,7 @@ class mail_thread(osv.AbstractModel):
                 mail_message = mail_msg_obj.browse(cr, uid, mail_message_ids[0], context=context)
                 route = self.message_route_verify(cr, uid, message, message_dict,
                                 (mail_message.model, mail_message.res_id, custom_values, uid, None),
-                                update_author=True, assert_model=True, create_fallback=True, context=context)
+                                update_author=True, assert_model=True, create_fallback=True, allow_private=True, context=context)
                 if route:
                     _logger.info(
                         'Routing mail from %s to %s with Message-Id %s: direct reply to a private message: %s, custom_values: %s, uid: %s',

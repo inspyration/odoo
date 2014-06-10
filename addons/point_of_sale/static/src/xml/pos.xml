@@ -330,9 +330,6 @@
                 <br/>
             </t>
             <div font='b'>
-                <t t-if='receipt.shop.name'>
-                    <div><t t-esc='receipt.shop.name' /></div>
-                </t>
                 <t t-if='receipt.company.contact_address'>
                     <div><t t-esc='receipt.company.contact_address' /></div>
                 </t>
@@ -692,7 +689,7 @@
                     <li class="event open_cashbox">Open Cashbox</li>
                     <li class="event print_receipt">Print Receipt</li>
                     <li class="event print_pdf_invoice">Print Invoice</li>
-                    <li class="event weighting_read_kg">Read Weighting Scale</li>
+                    <li class="event scale_read">Read Weighting Scale</li>
                 </ul>
             </div>
         </div>
@@ -781,7 +778,6 @@
             <t t-esc="widget.pos.company.name"/><br />
             Phone: <t t-esc="widget.pos.company.phone || ''"/><br />
             User: <t t-esc="widget.pos.user.name"/><br />
-            Shop: <t t-esc="widget.pos.shop.name"/><br />
             <br />
             <t t-if="widget.pos.config.receipt_header">
                 <div style='text-align:center'>

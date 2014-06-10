@@ -9,9 +9,18 @@
             <field name="arch" type="xml">
                 <data>
 	            <div name="config_sale" position="before">
-	                <separator string="After-Sale Services"/>
+	                <separator string="Sale Services"/>
+	                <group>
+                        <label for="id" string="Pre-Sale Services"/>
+                        <div>
+                            <div>
+                                <field name="group_scheduled_calls" class="oe_inline"/>
+                                <label for="group_scheduled_calls"/>
+                            </div>
+                        </div>
+                    </group>
                     <group>
-                        <label for="id" string="Features"/>
+                        <label for="id" string="After-Sale Services"/>
                         <div>
                             <div>
                                 <field name="module_crm_claim" class="oe_inline"/>
@@ -21,17 +30,6 @@
                                 <field name="module_crm_helpdesk" class="oe_inline"/>
                                 <label for="module_crm_helpdesk"/>
                             </div>
-                        </div>
-                    </group>
-                    <separator string="Sales Teams"/>
-                    <group>
-                        <label for="id" string="Manage Sales Teams"/>
-                        <div>
-                            <div>
-                                <field name="group_multi_salesteams" class="oe_inline"/>
-                                <label for="group_multi_salesteams"/>
-                            </div>
-                            
                         </div>
                     </group>
 	            </div>

@@ -153,7 +153,7 @@ class configmanager(object):
 
         # WEB
         group = optparse.OptionGroup(parser, "Web interface Configuration")
-        group.add_option("--db-filter", dest="dbfilter", default='.*',
+        group.add_option("--db-filter", dest="dbfilter", my_default='.*',
                          help="Filter listed database", metavar="REGEXP")
         parser.add_option_group(group)
 
@@ -433,7 +433,9 @@ class configmanager(object):
 
         self.options['root_path'] = os.path.abspath(os.path.expanduser(os.path.expandvars(os.path.dirname(openerp.__file__))))
         if not self.options['addons_path'] or self.options['addons_path']=='None':
-            self.options['addons_path'] = os.path.join(self.options['root_path'], 'addons')
+            base_addons = os.path.join(self.options['root_path'], 'addons')
+            main_addons = os.path.abspath(os.path.join(self.options['root_path'], '../addons'))
+            self.options['addons_path'] = '%s,%s' % (base_addons, main_addons)
         else:
             self.options['addons_path'] = ",".join(
                     os.path.abspath(os.path.expanduser(os.path.expandvars(x)))

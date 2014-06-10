@@ -38,7 +38,7 @@ class WebsiteCrmPartnerAssign(http.Controller):
 
         '/partners/grade/<model("res.partner.grade"):grade>/country/<model("res.country"):country>',
         '/partners/grade/<model("res.partner.grade"):grade>/country/<model("res.country"):country>/page/<int:page>',
-    ], type='http', auth="public", website=True, multilang=True)
+    ], type='http', auth="public", website=True)
     def partners(self, country=None, grade=None, page=0, **post):
         country_all = post.pop('country_all', False)
         partner_obj = request.registry['res.partner']
@@ -144,7 +144,7 @@ class WebsiteCrmPartnerAssign(http.Controller):
         return request.website.render("website_crm_partner_assign.index", values)
 
     # Do not use semantic controller due to SUPERUSER_ID
-    @http.route(['/partners/<partner_id>'], type='http', auth="public", website=True, multilang=True)
+    @http.route(['/partners/<partner_id>'], type='http', auth="public", website=True)
     def partners_detail(self, partner_id, partner_name='', **post):
         mo = re.search('-([-0-9]+)$', str(partner_id))
         current_grade, current_country = None, None

@@ -27,6 +27,7 @@ Miscellaneous tools used by OpenERP.
 
 from functools import wraps
 import cProfile
+from contextlib import contextmanager
 import subprocess
 import logging
 import os
@@ -459,6 +460,7 @@ ALL_LANGUAGES = {
         'fa_IR': u'Persian / فارس',
         'fi_FI': u'Finnish / Suomi',
         'fr_BE': u'French (BE) / Français (BE)',
+        'fr_CA': u'French (CA) / Français (CA)',
         'fr_CH': u'French (CH) / Français (CH)',
         'fr_FR': u'French / Français',
         'gl_ES': u'Galician / Galego',
@@ -1208,6 +1210,11 @@ def dumpstacks(sig=None, frame=None):
 
     _logger.info("\n".join(code))
 
-
+@contextmanager
+def ignore(*exc):
+    try:
+        yield
+    except exc:
+        pass
 
 # vim:expandtab:smartindent:tabstop=4:softtabstop=4:shiftwidth=4:

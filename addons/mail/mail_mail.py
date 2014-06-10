@@ -41,6 +41,7 @@ class mail_mail(osv.Model):
     _description = 'Outgoing Mails'
     _inherits = {'mail.message': 'mail_message_id'}
     _order = 'id desc'
+    _rec_name = 'subject'
 
     _columns = {
         'mail_message_id': fields.many2one('mail.message', 'Message', required=True, ondelete='cascade'),
@@ -147,11 +148,13 @@ class mail_mail(osv.Model):
     def _get_partner_access_link(self, cr, uid, mail, partner=None, context=None):
         """Generate URLs for links in mails: partner has access (is user):
         link to action_mail_redirect action that will redirect to doc or Inbox """
+        if context is None:
+            context = {}
         if partner and partner.user_ids:
             base_url = self.pool.get('ir.config_parameter').get_param(cr, uid, 'web.base.url')
             mail_model = mail.model or 'mail.thread'
             url = urljoin(base_url, self.pool[mail_model]._get_access_link(cr, uid, mail, partner, context=context))
-            return _("""<span class='oe_mail_footer_access'><small>Access your messages and documents <a style='color:inherit' href="%s">in Odoo</a></small></span>""") % url
+            return _("""<span class='oe_mail_footer_access'><small>about <a style='color:inherit' href="%s">%s %s</a></small></span>""") % (url, context.get('model_name', ''), mail.record_name)
         else:
             return None
 
@@ -223,11 +226,21 @@ class mail_mail(osv.Model):
                 email sending process has failed
             :return: True
         """
+        if context is None:
+            context = {}
         ir_mail_server = self.pool.get('ir.mail_server')
         ir_attachment = self.pool['ir.attachment']
-
         for mail in self.browse(cr, SUPERUSER_ID, ids, context=context):
             try:
+                # TDE note: remove me when model_id field is present on mail.message - done here to avoid doing it multiple times in the sub method
+                if mail.model:
+                    model_id = self.pool['ir.model'].search(cr, SUPERUSER_ID, [('model', '=', mail.model)], context=context)[0]
+                    model = self.pool['ir.model'].browse(cr, SUPERUSER_ID, model_id, context=context)
+                else:
+                    model = None
+                if model:
+                    context['model_name'] = model.name
+
                 # load attachment binary data with a separate read(), as prefetching all
                 # `datas` (binary field) could bloat the browse cache, triggerring
                 # soft/hard mem limits with temporary data.
@@ -235,6 +248,7 @@ class mail_mail(osv.Model):
                 attachments = [(a['datas_fname'], base64.b64decode(a['datas']))
                                  for a in ir_attachment.read(cr, SUPERUSER_ID, attachment_ids,
                                                              ['datas_fname', 'datas'])]
+
                 # specific behavior to customize the send email for notified partners
                 email_list = []
                 if mail.email_to:

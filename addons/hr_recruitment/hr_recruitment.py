@@ -25,12 +25,11 @@ from openerp.tools.translate import _
 
 
 AVAILABLE_PRIORITIES = [
-    ('', ''),
-    ('5', 'Not Good'),
-    ('4', 'On Average'),
+    ('0', 'Bad'),
+    ('1', 'Below Average'),
+    ('2', 'Average'),
     ('3', 'Good'),
-    ('2', 'Very Good'),
-    ('1', 'Excellent')
+    ('4', 'Excellent')
 ]
 
 class hr_recruitment_source(osv.osv):
@@ -498,21 +497,6 @@ class hr_applicant(osv.Model):
         dict_act_window['view_mode'] = 'form,tree'
         return dict_act_window
 
-    def set_priority(self, cr, uid, ids, priority, *args):
-        """Set applicant priority
-        """
-        return self.write(cr, uid, ids, {'priority': priority})
-
-    def set_high_priority(self, cr, uid, ids, *args):
-        """Set applicant priority to high
-        """
-        return self.set_priority(cr, uid, ids, '1')
-
-    def set_normal_priority(self, cr, uid, ids, *args):
-        """Set applicant priority to normal
-        """
-        return self.set_priority(cr, uid, ids, '3')
-
     def get_empty_list_help(self, cr, uid, help, context=None):
         context['empty_list_help_model'] = 'hr.job'
         context['empty_list_help_id'] = context.get('default_job_id', None)
@@ -538,6 +522,16 @@ class hr_job(osv.osv):
                 ], context=context)
         return res
 
+    def _count_all(self, cr, uid, ids, field_name, arg, context=None):
+        Applicant = self.pool['hr.applicant']
+        return {
+            job_id: {
+                'application_count': Applicant.search_count(cr,uid, [('job_id', '=', job_id)], context=context),
+                'documents_count': len(self._get_attached_docs(cr, uid, [job_id], field_name, arg, context=context)[job_id])
+            }
+            for job_id in ids
+        }
+
     _columns = {
         'survey_id': fields.many2one('survey.survey', 'Interview Form', help="Choose an interview form for this job position and you will be able to print/answer this interview from all applicants who apply for this job"),
         'alias_id': fields.many2one('mail.alias', 'Alias', ondelete="restrict", required=True,
@@ -545,8 +539,10 @@ class hr_job(osv.osv):
                                          "create new applicants for this job position."),
         'address_id': fields.many2one('res.partner', 'Job Location', help="Address where employees are working"),
         'application_ids': fields.one2many('hr.applicant', 'job_id', 'Applications'),
+        'application_count': fields.function(_count_all, type='integer', string='Applications', multi=True),
         'manager_id': fields.related('department_id', 'manager_id', type='many2one', string='Department Manager', relation='hr.employee', readonly=True, store=True),
         'document_ids': fields.function(_get_attached_docs, type='one2many', relation='ir.attachment', string='Applications'),
+        'documents_count': fields.function(_count_all, type='integer', string='Documents', multi=True),
         'user_id': fields.many2one('res.users', 'Recruitment Responsible', track_visibility='onchange'),
         'color': fields.integer('Color Index'),
     }

@@ -190,7 +190,7 @@ $sheet-padding: 16px
     td
         vertical-align: top
     .oe_title
-        width: 50%
+        width: 38%
         float: left    
     .oe_title:after
         content: "."
@@ -330,47 +330,48 @@ $sheet-padding: 16px
             @include box-shadow(none)
             &:hover
                 background: #ED6F6A
+    .oe_stat_button
+        font-weight: normal
+        width: 132px !important
+        height: 40px
+        color: #666
+        margin: 0px -1px -1px 0px
+        padding: 0
+        border: 1px solid #dddddd
+        border-radius: 0
+        box-shadow: none
+        background: white
+        > div
+            display: table-cell
+            vertical-align: middle
+            text-align: left
+            padding: 0
+            line-height: 120%
+        .stat_button_icon
+            color: #7C7BAD
+            font-size: 24px
+            padding: 0px 3px
+            width: 37px
+            text-align: center
+        .oe_form_field_percent_pie
+            width: 42px
+        .oe_form_field_bar_chart
+            width: 42px
+        svg
+            width: 38px
+            height: 38px
+            display: inline
+            vertical-align: middle
+    .oe_stat_button:hover
+        background: #7c7bad
+        color: white
+        .fa
+            color: white
     .oe_button_box
         width: 400px
-        text-align: left
-        .oe_stat_button:hover
-            background: #7c7bad
-            color: white
-            .fa
-                color: white
+        text-align: right
         .oe_stat_button
-            font-weight: normal
             display: inline-table
-            width: 33% !important
-            height: 42px
-            margin: 0px -1px -1px 0px
-            padding: 0
-            color: #666
-            border: 1px solid #dddddd
-            border-radius: 0
-            box-shadow: none
-            background: white
-            > div
-                display: table-cell
-                vertical-align: middle
-                text-align: left
-                padding: 0
-                line-height: 120%
-            .stat_button_icon
-                color: #7C7BAD
-                font-size: 24px
-                padding: 0px 3px
-                width: 37px
-                text-align: center
-            .oe_form_field_percent_pie
-                width: 42px
-            .oe_form_field_bar_chart
-                width: 42px
-            svg
-                width: 38px
-                height: 38px
-                display: inline
-                vertical-align: middle
     .oe_avatar
         > img
             max-height: 90px
@@ -403,7 +404,7 @@ $sheet-padding: 16px
             text-shadow: 0 0 2px black
             vertical-align: top
             position: relative
-            top: -5px
+            top: -8px
         .oe_star_on:hover, .oe_star_off:hover
             text-decoration: none
         .oe_star_on
@@ -423,7 +424,33 @@ $sheet-padding: 16px
             border-style: inset
             border-width: 1px
     // }}}
-
+    // Kanban state (used in form and kanban) {{{
+    .oe_kanban_status
+        position: relative
+        display: inline-block
+        height: 12px
+        width: 12px
+        @include radius(6px)
+        @include radial-gradient((#eee 0%, #ccc 40%, #bbb 100%))
+        // +background-image(radial-gradient(45px 45px, #0ff 10px, #1e90ff 30px))
+    .oe_kanban_status_green
+        background: green
+        @include radial-gradient((#55dd55 0%, #44aa44 40%, #339933 100%))
+    .oe_kanban_status_red
+        background: red
+        @include radial-gradient((#ee7777 0%, #cc3333 40%, #bb0808 100%))
+    .btn-group.kanban_state
+        padding-top: 8px
+        margin-right: 4px !important
+        .dropdown-menu
+            min-width: 100%
+            padding-right: 10px !important
+        .dropdown-menu li a, .dropdown-menu li a:hover, .dropdown-menu li a:focus
+            padding-left: 5px
+            padding-right: 0px
+        a
+            color: #333333
+    // }}}
     // Tags (for many2many tags, among others) {{{
     .oe_tag
         border: 1px solid $tag-border
@@ -452,7 +479,7 @@ $sheet-padding: 16px
                 display: inline-block
                 height: 12px
                 width: 12px
-                vertical-align: bottom
+                vertical-align: top
                 border-radius: 10px
                 margin: 1px 0
             &.oe_form_invalid
@@ -471,33 +498,6 @@ $sheet-padding: 16px
                 font-style: italic
                 text-decoration: none
         margin-bottom: 1px
-    // }}}
-    // Tooltips {{{
-    &.oe_tooltip
-        font-size: 12px
-        .oe_tooltip_string
-            color: #FD5
-            font-weight: bold
-            font-size: 13px
-        .oe_tooltip_help
-            white-space: pre-wrap
-        .oe_tooltip_technical
-            padding: 0 0 4px 0
-            margin: 5px 0 0 15px
-            li
-                list-style: circle
-        .oe_tooltip_technical_title
-            font-weight: bold
-        .oe_tooltip_close
-            margin: -5px 0 0 2px
-            cursor: default
-            float: right
-            color: white
-            &:hover
-                color: #999
-                cursor: pointer
-        .oe_tooltip_message
-            max-width: 310px
     // }}}
     // Notebook {{{
     .oe_notebook
@@ -877,7 +877,7 @@ $sheet-padding: 16px
             font-weight: bold
             color: black
             span
-                color: #c81010
+                color: #a24689
     // }}}
     // Webclient.leftbar items {{{
 
@@ -1578,7 +1578,7 @@ $sheet-padding: 16px
     // FormView.header {{{
     .oe_form > :not(.oe_form_nosheet) header
         padding-left: 2px
-        ul
+        ul:not(.oe_tooltip_technical):not(.oe_dropdown_menu)
             display: inline-block
             float: right
         .oe_button
@@ -2707,6 +2707,44 @@ body.oe_single_form
             overflow: hidden !important
 // }}}
 
+// End of customize
+
+// Customize bootstrap3 for tooltip
+.tooltip
+    padding: 0
+    margin: 0
+    font-family: "Lucida Grande", Helvetica, Verdana, Arial, sans-serif
+    color: #4c4c4c
+    font-size: 12px
+    background: white
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5)
+    background-color: transparent
+    .tooltip-inner
+        text-align: left !important
+        max-width: 350px
+        .oe_tooltip_string
+            color: #FD5
+            font-weight: bold
+            font-size: 13px
+        .oe_tooltip_help
+            white-space: pre-wrap
+        .oe_tooltip_technical
+            padding: 0 0 4px 0
+            margin: 5px 0 0 15px
+            li
+                list-style: circle
+        .oe_tooltip_technical_title
+            font-weight: bold
+        .oe_tooltip_close
+            margin: -5px 0 0 2px
+            cursor: default
+            float: right
+            color: white
+            &:hover
+                color: #999
+                cursor: pointer
+        .oe_tooltip_message
+            max-width: 310px
 
 // Hack for ui icon {{{
 .ui-icon
@@ -2739,6 +2777,7 @@ input[type="radio"], input[type="checkbox"]
 .blockUI.blockOverlay
     background-color: black
     opacity: 0.6000000238418579
+
 
 // au BufWritePost,FileWritePost *.sass :!sass --style expanded --line-numbers <afile> > "%:p:r.css"
 // vim:tabstop=4:shiftwidth=4:softtabstop=4:fdm=marker:

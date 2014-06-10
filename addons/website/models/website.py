@@ -64,18 +64,22 @@ def url_for(path_or_uri, lang=None):
 
     return location.decode('utf-8')
 
-def is_multilang_url(path, langs=None):
+def is_multilang_url(local_url, langs=None):
     if not langs:
         langs = [lg[0] for lg in request.website.get_languages()]
-    spath = path.split('/')
+    spath = local_url.split('/')
     # if a language is already in the path, remove it
     if spath[1] in langs:
         spath.pop(1)
-        path = '/'.join(spath)
+        local_url = '/'.join(spath)
     try:
+        # Try to match an endpoint in werkzeug's routing table
+        url = local_url.split('?')
+        path = url[0]
+        query_string = url[1] if len(url) > 1 else None
         router = request.httprequest.app.get_db_router(request.db).bind('')
-        func = router.match(path)[0]
-        return func.routing.get('multilang', False)
+        func = router.match(path, query_args=query_string)[0]
+        return func.routing.get('website', False) and func.routing.get('multilang', True)
     except Exception:
         return False
 
@@ -116,10 +120,6 @@ class website(osv.osv):
         menu = menus and menus[0] or False
         return dict( map(lambda x: (x, menu), ids) )
 
-    def _get_public_user(self, cr, uid, ids, name='public_user', arg=(), context=None):
-        ref = self.get_public_user(cr, uid, context=context)
-        return dict( map(lambda x: (x, ref), ids) )
-
     _name = "website" # Avoid website.website convention for conciseness (for new api). Got a special authorization from xmo and rco
     _description = "Website"
     _columns = {
@@ -136,13 +136,17 @@ class website(osv.osv):
         'social_googleplus': fields.char('Google+ Account'),
         'google_analytics_key': fields.char('Google Analytics Key'),
         'user_id': fields.many2one('res.users', string='Public User'),
-        'public_user': fields.function(_get_public_user, relation='res.users', type='many2one', string='Public User'),
+        'partner_id': fields.related('user_id','partner_id', type='many2one', relation='res.partner', string='Public Partner'),
         'menu_id': fields.function(_get_menu, relation='website.menu', type='many2one', string='Main Menu',
             store= {
                 'website.menu': (_get_menu_website, ['sequence','parent_id','website_id'], 10)
             })
     }
 
+    _defaults = {
+        'company_id': lambda self,cr,uid,c: self.pool['ir.model.data'].xmlid_to_res_id(cr, openerp.SUPERUSER_ID, 'base.public_user'),
+    }
+    
     # cf. Wizard hack in website_views.xml
     def noop(self, *args, **kwargs):
         pass
@@ -193,11 +197,6 @@ class website(osv.osv):
         except:
             return False
 
-    def get_public_user(self, cr, uid, context=None):
-        uid = openerp.SUPERUSER_ID
-        res = self.pool['ir.model.data'].get_object_reference(cr, uid, 'base', 'public_user')
-        return res and res[1] or False
-
     @openerp.tools.ormcache(skiparg=3)
     def _get_languages(self, cr, uid, id, context=None):
         website = self.browse(cr, uid, id)
@@ -210,22 +209,10 @@ class website(osv.osv):
         # TODO: Select website, currently hard coded
         return self.pool['website'].browse(cr, uid, 1, context=context)
 
-    def preprocess_request(self, cr, uid, ids, request, context=None):
-        # TODO FP: is_website_publisher and editable in context should be removed
-        # for performance reasons (1 query per image to load) but also to be cleaner
-        # I propose to replace this by a group 'base.group_website_publisher' on the
-        # view that requires it.
-        Access = request.registry['ir.model.access']
+    def is_publisher(self, cr, uid, ids, context=None):
+        Access = self.pool['ir.model.access']
         is_website_publisher = Access.check(cr, uid, 'ir.ui.view', 'write', False, context)
-
-        lang = request.context['lang']
-        is_master_lang = lang == request.website.default_lang_code
-
-        request.redirect = lambda url: werkzeug.utils.redirect(url_for(url))
-        request.context.update(
-            editable=is_website_publisher,
-            translatable=not is_master_lang,
-        )
+        return is_website_publisher
 
     def get_template(self, cr, uid, ids, template, context=None):
         if isinstance(template, (int, long)):
@@ -337,7 +324,7 @@ class website(osv.osv):
         """
         router = request.httprequest.app.get_db_router(request.db)
         # Force enumeration to be performed as public user
-        uid = self.get_public_user(cr, uid, context=context)
+        uid = request.website.user_id.id
         url_list = []
         for rule in router.iter_rules():
             if not self.rule_is_enumerable(rule):
@@ -517,10 +504,9 @@ class website(osv.osv):
         if not ids:
             return self._image_placeholder(response)
 
-        presized = '%s_big' % field
         concurrency = '__last_update'
         [record] = Model.read(cr, openerp.SUPERUSER_ID, [id],
-                              [concurrency, field, presized],
+                              [concurrency, field],
                               context=context)
 
         if concurrency in record:
@@ -545,34 +531,32 @@ class website(osv.osv):
         if response.status_code == 304:
             return response
 
-        data = (record.get(presized) or record[field]).decode('base64')
+        data = record[field].decode('base64')
+
+        if (not max_width) and (not max_height):
+            response.data = data
+            return response
 
         image = Image.open(cStringIO.StringIO(data))
         response.mimetype = Image.MIME[image.format]
 
-        # record provides a pre-resized version of the base field, use that
-        # directly
-        if record.get(presized):
-            response.data = data
-            return response
-        try:
-            fit = int(max_width), int(max_height)
-        except TypeError:
-            fit = (maxint, maxint)
         w, h = image.size
-        max_w, max_h = fit
+        try:
+            max_w, max_h = int(max_width), int(max_height)
+        except:
+            max_w, max_h = (maxint, maxint)
 
         if w < max_w and h < max_h:
             response.data = data
         else:
-            image.thumbnail(fit, Image.ANTIALIAS)
+            image.thumbnail((max_w, max_h), Image.ANTIALIAS)
             image.save(response.stream, image.format)
             # invalidate content-length computed by make_conditional as
             # writing to response.stream does not do it (as of werkzeug 0.9.3)
             del response.headers['Content-Length']
 
         return response
-        
+
 
 class website_menu(osv.osv):
     _name = "website.menu"
@@ -651,9 +635,7 @@ class ir_attachment(osv.osv):
                 result[attach.id] = urlplus('/website/image', {
                     'model': 'ir.attachment',
                     'field': 'datas',
-                    'id': attach.id,
-                    'max_width': 1024,
-                    'max_height': 768,
+                    'id': attach.id
                 })
         return result
     def _datas_checksum(self, cr, uid, ids, name, arg, context=None):

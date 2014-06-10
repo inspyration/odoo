@@ -75,8 +75,30 @@ class stock_production_lot(osv.osv):
         'alert_date': _get_date('alert_time'),
     }
 
+
+class stock_quant(osv.osv):
+    _inherit = 'stock.quant'
+
+    def _get_quants(self, cr, uid, ids, context=None):
+        return self.pool.get('stock.quant').search(cr, uid, [('lot_id', 'in', ids)], context=context)
+
+    _columns = {
+        'removal_date': fields.related('lot_id', 'removal_date', type='datetime', string='Removal Date',
+            store={
+                'stock.quant': (lambda self, cr, uid, ids, ctx: ids, ['lot_id'], 20),
+                'stock.production.lot': (_get_quants, ['removal_date'], 20),
+            }),
+    }
+
+    def apply_removal_strategy(self, cr, uid, location, product, qty, domain, removal_strategy, context=None):
+        if removal_strategy == 'fefo':
+            order = 'removal_date, id'
+            return self._quants_get_order(cr, uid, location, product, qty, domain, order, context=context)
+        return super(stock_quant, self).apply_removal_strategy(cr, uid, location, product, qty, domain, removal_strategy, context=context)
+
+
 class product_product(osv.osv):
-    _inherit = 'product.product'
+    _inherit = 'product.template'
     _columns = {
         'life_time': fields.integer('Product Life Time',
             help='When a new a Serial Number is issued, this is the number of days before the goods may become dangerous and must not be consumed.'),

@@ -10,7 +10,7 @@ import werkzeug.routing
 import openerp
 from openerp.addons.base import ir
 from openerp.addons.base.ir import ir_qweb
-from openerp.addons.website.models.website import slug
+from openerp.addons.website.models.website import slug, url_for
 from openerp.http import request
 from openerp.osv import orm
 
@@ -32,6 +32,13 @@ class ir_http(orm.AbstractModel):
             page=PageConverter,
         )
 
+    def _auth_method_public(self):
+        # TODO: select user_id from matching website
+        if not request.session.uid:
+            request.uid = self.pool['ir.model.data'].xmlid_to_res_id(request.cr, openerp.SUPERUSER_ID, 'base.public_user')
+        else:
+            request.uid = request.session.uid
+
     def _dispatch(self):
         first_pass = not hasattr(request, 'website')
         request.website = None
@@ -44,22 +51,28 @@ class ir_http(orm.AbstractModel):
             # in all cases, website processes them
             request.website_enabled = True
 
+        request.website_multilang = request.website_enabled and func and func.routing.get('multilang', True)
+
         if request.website_enabled:
             if func:
                 self._authenticate(func.routing['auth'])
             else:
                 self._auth_method_public()
+            request.redirect = lambda url: werkzeug.utils.redirect(url_for(url))
             request.website = request.registry['website'].get_current_website(request.cr, request.uid, context=request.context)
             if first_pass:
                 request.lang = request.website.default_lang_code
             request.context['lang'] = request.lang
-            request.website.preprocess_request(request)
             if not func:
                 path = request.httprequest.path.split('/')
                 langs = [lg[0] for lg in request.website.get_languages()]
                 if path[1] in langs:
                     request.lang = request.context['lang'] = path.pop(1)
                     path = '/'.join(path) or '/'
+                    if request.lang == request.website.default_lang_code:
+                        # If language is in the url and it is the default language, redirect
+                        # to url without language so google doesn't see duplicate content
+                        return request.redirect(path + '?' + request.httprequest.query_string)
                     return self.reroute(path)
                 return self._handle_exception(code=404)
         return super(ir_http, self)._dispatch()
@@ -99,6 +112,8 @@ class ir_http(orm.AbstractModel):
             if generated_path != current_path:
                 if request.lang != request.website.default_lang_code:
                     path = '/' + request.lang + path
+                if request.httprequest.query_string:
+                    path += '?' + request.httprequest.query_string
                 return werkzeug.utils.redirect(path)
 
     def _serve_attachment(self):
@@ -211,6 +226,6 @@ class PageConverter(werkzeug.routing.PathConverter):
             record = {'loc': xid}
             if view['priority'] <> 16:
                 record['__priority'] = min(round(view['priority'] / 32.0,1), 1)
-            if view.get('write_date'):
+            if view['write_date']:
                 record['__lastmod'] = view['write_date'][:10]
             yield record

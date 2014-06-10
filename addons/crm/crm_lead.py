@@ -90,7 +90,10 @@ class crm_lead(format_address, osv.osv):
 
     def _get_default_section_id(self, cr, uid, context=None):
         """ Gives default section by checking if present in the context """
-        return self._resolve_section_id_from_context(cr, uid, context=context) or False
+        section_id = self._resolve_section_id_from_context(cr, uid, context=context) or False
+        if not section_id:
+            section_id = self.pool.get('res.users').browse(cr, uid, uid, context).default_section_id.id or False
+        return section_id
 
     def _get_default_stage_id(self, cr, uid, context=None):
         """ Gives default stage_id """
@@ -187,7 +190,12 @@ class crm_lead(format_address, osv.osv):
                     duration = abs(int(ans.days))
                 res[lead.id][field] = duration
         return res
-
+    def _meeting_count(self, cr, uid, ids, field_name, arg, context=None):
+        Event = self.pool['calendar.event']
+        return {
+            opp_id: Event.search_count(cr,uid, [('opportunity_id', '=', opp_id)], context=context)
+            for opp_id in ids
+        }
     _columns = {
         'partner_id': fields.many2one('res.partner', 'Partner', ondelete='set null', track_visibility='onchange',
             select=True, help="Linked partner (optional). Usually created when converting the lead."),
@@ -262,6 +270,7 @@ class crm_lead(format_address, osv.osv):
         'payment_mode': fields.many2one('crm.payment.mode', 'Payment Mode', \
                             domain="[('section_id','=',section_id)]"),
         'planned_cost': fields.float('Planned Costs'),
+        'meeting_count': fields.function(_meeting_count, string='# Meetings', type='integer'),
     }
 
     _defaults = {
@@ -420,21 +429,6 @@ class crm_lead(format_address, osv.osv):
                 raise osv.except_osv(_('Error!'), _("You are already at the top level of your sales-team category.\nTherefore you cannot escalate furthermore."))
             self.write(cr, uid, [case.id], data, context=context)
         return True
-
-    def set_priority(self, cr, uid, ids, priority, context=None):
-        """ Set lead priority
-        """
-        return self.write(cr, uid, ids, {'priority': priority}, context=context)
-
-    def set_high_priority(self, cr, uid, ids, context=None):
-        """ Set lead priority to high
-        """
-        return self.set_priority(cr, uid, ids, '1', context=context)
-
-    def set_normal_priority(self, cr, uid, ids, context=None):
-        """ Set lead priority to normal
-        """
-        return self.set_priority(cr, uid, ids, '3', context=context)
 
     def _merge_get_result_type(self, cr, uid, opps, context=None):
         """
@@ -870,21 +864,22 @@ class crm_lead(format_address, osv.osv):
             'type': 'ir.actions.act_window',
         }
 
-    def action_makeMeeting(self, cr, uid, ids, context=None):
+    def action_schedule_meeting(self, cr, uid, ids, context=None):
         """
         Open meeting's calendar view to schedule meeting on current opportunity.
         :return dict: dictionary value for created Meeting view
         """
-        opportunity = self.browse(cr, uid, ids[0], context)
+        lead = self.browse(cr, uid, ids[0], context)
         res = self.pool.get('ir.actions.act_window').for_xml_id(cr, uid, 'calendar', 'action_calendar_event', context)
+        partner_ids = [self.pool['res.users'].browse(cr, uid, uid, context=context).partner_id.id]
+        if lead.partner_id:
+            partner_ids.append(lead.partner_id.id)
         res['context'] = {
-            'default_opportunity_id': opportunity.id,
-            'default_partner_id': opportunity.partner_id and opportunity.partner_id.id or False,
-            'default_partner_ids' : opportunity.partner_id and [opportunity.partner_id.id] or False,
-            'default_user_id': uid,
-            'default_section_id': opportunity.section_id and opportunity.section_id.id or False,
-            'default_email_from': opportunity.email_from,
-            'default_name': opportunity.name,
+            'default_opportunity_id': lead.type == 'opportunity' and lead.id or False,
+            'default_partner_id': lead.partner_id and lead.partner_id.id or False,
+            'default_partner_ids': partner_ids,
+            'default_section_id': lead.section_id and lead.section_id.id or False,
+            'default_name': lead.name,
         }
         return res
 

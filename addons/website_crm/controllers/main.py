@@ -16,7 +16,7 @@ class contactus(http.Controller):
         )
         return url
 
-    @http.route(['/page/website.contactus', '/page/contactus'], type='http', auth="public", website=True, multilang=True)
+    @http.route(['/page/website.contactus', '/page/contactus'], type='http', auth="public", website=True)
     def contact(self, **kwargs):
         values = {}
         for field in ['description', 'partner_name', 'phone', 'contact_name', 'email_from', 'name']:
@@ -25,7 +25,7 @@ class contactus(http.Controller):
         values.update(kwargs=kwargs.items())
         return request.website.render("website.contactus", values)
 
-    @http.route(['/crm/contactus'], type='http', auth="public", website=True, multilang=True)
+    @http.route(['/crm/contactus'], type='http', auth="public", website=True)
     def contactus(self, description=None, partner_name=None, phone=None, contact_name=None, email_from=None, name=None, **kwargs):
         post = {
             'description': description,
@@ -34,7 +34,6 @@ class contactus(http.Controller):
             'contact_name': contact_name,
             'email_from': email_from,
             'name': name or contact_name,
-            'user_id': False,
         }
 
         # fields validation
@@ -51,6 +50,7 @@ class contactus(http.Controller):
         except ValueError:
             pass
 
+        post['user_id'] = False
         environ = request.httprequest.headers.environ
         post['description'] = "%s\n-----------------------------\nIP: %s\nUSER_AGENT: %s\nACCEPT_LANGUAGE: %s\nREFERER: %s" % (
             post['description'],
@@ -62,6 +62,7 @@ class contactus(http.Controller):
             if not hasattr(field_value, 'filename'):
                 post['description'] = "%s\n%s: %s" % (post['description'], field_name, field_value)
 
+        post['section_id'] = request.registry['ir.model.data'].xmlid_to_res_id(request.cr, SUPERUSER_ID, 'website.salesteam_website_sales')
         lead_id = request.registry['crm.lead'].create(request.cr, SUPERUSER_ID, post, request.context)
 
         for field_name, field_value in kwargs.items():

@@ -77,7 +77,7 @@ class account_analytic_invoice_line(osv.osv):
             price = price_unit
         elif pricelist_id:
             price = res.price
-        else:
+        if price is False:
             price = res.list_price
         if not name:
             name = self.pool.get('product.product').name_get(cr, uid, [res.id], context=local_context)[0][1]
@@ -756,10 +756,10 @@ class account_analytic_account(osv.osv):
                     new_date = next_date+relativedelta(days=+interval)
                 elif contract.recurring_rule_type == 'weekly':
                     new_date = next_date+relativedelta(weeks=+interval)
-                elif contract.recurring_rule_type == 'yearly':
-                    new_date = next_date+relativedelta(years=+interval)
-                else:
+                elif contract.recurring_rule_type == 'monthly':
                     new_date = next_date+relativedelta(months=+interval)
+                else:
+                    new_date = next_date+relativedelta(years=+interval)
                 self.write(cr, uid, [contract.id], {'recurring_next_date': new_date.strftime('%Y-%m-%d')}, context=context)
                 if automatic:
                     cr.commit()

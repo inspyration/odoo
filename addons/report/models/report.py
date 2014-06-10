@@ -265,9 +265,6 @@ class Report(osv.Model):
         :param ids: Ids of the records to print (if not used, pass an empty list)
         :param report_name: Name of the template to generate an action for
         """
-        if context is None:
-            context = {}
-
         if ids:
             if not isinstance(ids, list):
                 ids = [ids]
@@ -278,7 +275,10 @@ class Report(osv.Model):
         try:
             report = report_obj.browse(cr, uid, idreport[0], context=context)
         except IndexError:
-            raise osv.except_osv(_('Bad Report'), _('This report is not loaded into the database.'))
+            raise osv.except_osv(
+                _('Bad Report Reference'),
+                _('This report is not loaded into the database: %s.' % report_name)
+            )
 
         return {
             'context': context,
@@ -287,6 +287,7 @@ class Report(osv.Model):
             'report_name': report.report_name,
             'report_type': report.report_type,
             'report_file': report.report_file,
+            'context': context,
         }
 
     #--------------------------------------------------------------------------

@@ -672,11 +672,11 @@ class BaseModel(object):
 
     OpenERP models are created by inheriting from this class' subclasses:
 
-        * Model: for regular database-persisted models
-        * TransientModel: for temporary data, stored in the database but automatically
-                          vaccuumed every so often
-        * AbstractModel: for abstract super classes meant to be shared by multiple
-                        _inheriting classes (usually Models or TransientModels)
+    * Model: for regular database-persisted models
+    * TransientModel: for temporary data, stored in the database but automatically
+                      vaccuumed every so often
+    * AbstractModel: for abstract super classes meant to be shared by multiple
+                     _inheriting classes (usually Models or TransientModels)
 
     The system will later instantiate the class once per database (on
     which the class' module is installed).
@@ -729,7 +729,6 @@ class BaseModel(object):
     _all_columns = {}
 
     _table = None
-    _invalids = set()
     _log_create = False
     _sql_constraints = []
     _protected = ['read', 'write', 'create', 'default_get', 'perm_read', 'unlink', 'fields_get', 'fields_view_get', 'search', 'name_get', 'distinct_field_get', 'name_search', 'copy', 'import_data', 'search_count', 'exists']
@@ -1543,9 +1542,6 @@ class BaseModel(object):
 
             yield dbid, xid, converted, dict(extras, record=stream.index)
 
-    def get_invalid_fields(self, cr, uid):
-        return list(self._invalids)
-
     def _validate(self, cr, uid, ids, context=None):
         context = context or {}
         lng = context.get('lang')
@@ -1566,12 +1562,9 @@ class BaseModel(object):
                 # Check presence of __call__ directly instead of using
                 # callable() because it will be deprecated as of Python 3.0
                 if hasattr(msg, '__call__'):
-                    tmp_msg = msg(self, cr, uid, ids, context=context)
-                    if isinstance(tmp_msg, tuple):
-                        tmp_msg, params = tmp_msg
-                        translated_msg = tmp_msg % params
-                    else:
-                        translated_msg = tmp_msg
+                    translated_msg = msg(self, cr, uid, ids, context=context)
+                    if isinstance(translated_msg, tuple):
+                        translated_msg = translated_msg[0] % translated_msg[1]
                 else:
                     translated_msg = trans._get_source(cr, uid, self._name, 'constraint', lng, msg)
                 if extra_error:
@@ -1579,11 +1572,8 @@ class BaseModel(object):
                 error_msgs.append(
                         _("The field(s) `%s` failed against a constraint: %s") % (', '.join(fields), translated_msg)
                 )
-                self._invalids.update(fields)
         if error_msgs:
             raise except_orm('ValidateError', '\n'.join(error_msgs))
-        else:
-            self._invalids.clear()
 
     def default_get(self, cr, uid, fields_list, context=None):
         """
@@ -2816,7 +2806,7 @@ class BaseModel(object):
                                 ('numeric', 'float', get_pg_type(f)[1], '::'+get_pg_type(f)[1]),
                                 ('float8', 'float', get_pg_type(f)[1], '::'+get_pg_type(f)[1]),
                             ]
-                            if f_pg_type == 'varchar' and f._type == 'char' and ((f.size is None and f_pg_size) or f_pg_size < f.size):
+                            if f_pg_type == 'varchar' and f._type == 'char' and f_pg_size and (f.size is None or f_pg_size < f.size):
                                 try:
                                     with cr.savepoint():
                                         cr.execute('ALTER TABLE "%s" ALTER COLUMN "%s" TYPE %s' % (self._table, k, pg_varchar(f.size)))
@@ -5228,7 +5218,7 @@ def convert_pgerror_23502(model, fields, info, e):
     m = re.match(r'^null value in column "(?P<field>\w+)" violates '
                  r'not-null constraint\n',
                  str(e))
-    field_name = m.group('field')
+    field_name = m and m.group('field')
     if not m or field_name not in fields:
         return {'message': unicode(e)}
     message = _(u"Missing required value for the field '%s'.") % field_name
@@ -5243,7 +5233,7 @@ def convert_pgerror_23502(model, fields, info, e):
 def convert_pgerror_23505(model, fields, info, e):
     m = re.match(r'^duplicate key (?P<field>\w+) violates unique constraint',
                  str(e))
-    field_name = m.group('field')
+    field_name = m and m.group('field')
     if not m or field_name not in fields:
         return {'message': unicode(e)}
     message = _(u"The value for the field '%s' already exists.") % field_name

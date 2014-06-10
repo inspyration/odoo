@@ -61,8 +61,8 @@ class pos_config(osv.osv):
         'journal_ids' : fields.many2many('account.journal', 'pos_config_journal_rel', 
              'pos_config_id', 'journal_id', 'Available Payment Methods',
              domain="[('journal_user', '=', True ), ('type', 'in', ['bank', 'cash'])]",),
-        'warehouse_id' : fields.many2one('stock.warehouse', 'Warehouse',
-             required=True),
+        'picking_type_id': fields.many2one('stock.picking.type', 'Picking Type'),
+        'stock_location_id': fields.many2one('stock.location', 'Stock Location', domain=[('usage', '=', 'internal')], required=True),
         'journal_id' : fields.many2one('account.journal', 'Sale Journal',
              domain=[('type', '=', 'sale')],
              help="Accounting journal used to post sales entries."),
@@ -87,7 +87,8 @@ class pos_config(osv.osv):
                 "to customize the reference numbers of your orders."),
         'session_ids': fields.one2many('pos.session', 'config_id', 'Sessions'),
         'group_by' : fields.boolean('Group Journal Items', help="Check this if you want to group the Journal Items by Product while closing a Session"),
-        'pricelist_id': fields.many2one('product.pricelist','Pricelist', required=True)
+        'pricelist_id': fields.many2one('product.pricelist','Pricelist', required=True),
+        'company_id': fields.many2one('res.company', 'Company', required=True), 
     }
 
     def _check_cash_control(self, cr, uid, ids, context=None):
@@ -131,23 +132,38 @@ class pos_config(osv.osv):
         res = self.pool.get('account.journal').search(cr, uid, [('type', '=', 'sale'), ('company_id', '=', company_id)], limit=1, context=context)
         return res and res[0] or False
 
-    def _default_warehouse(self, cr, uid, context=None):
-        user = self.pool.get('res.users').browse(cr, uid, uid, context)
-        res = self.pool.get('stock.warehouse').search(cr, uid, [('company_id', '=', user.company_id.id)], limit=1, context=context)
-        return res and res[0] or False
-
     def _default_pricelist(self, cr, uid, context=None):
         res = self.pool.get('product.pricelist').search(cr, uid, [('type', '=', 'sale')], limit=1, context=context)
         return res and res[0] or False
 
+    def _get_default_location(self, cr, uid, context=None):
+        wh_obj = self.pool.get('stock.warehouse')
+        user = self.pool.get('res.users').browse(cr, uid, uid, context)
+        res = wh_obj.search(cr, uid, [('company_id', '=', user.company_id.id)], limit=1, context=context)
+        if res and res[0]:
+            return wh_obj.browse(cr, uid, res[0], context=context).lot_stock_id.id
+        return False
+
+    def _get_default_company(self, cr, uid, context=None):
+        company_id = self.pool.get('res.users')._get_company(cr, uid, context=context)
+        return company_id
+
     _defaults = {
         'state' : POS_CONFIG_STATE[0][0],
-        'warehouse_id': _default_warehouse,
         'journal_id': _default_sale_journal,
         'group_by' : True,
         'pricelist_id': _default_pricelist,
         'iface_invoicing': True,
+        'stock_location_id': _get_default_location,
+        'company_id': _get_default_company,
     }
+
+    def onchange_picking_type_id(self, cr, uid, ids, picking_type_id, context=None):
+        p_type_obj = self.pool.get("stock.picking.type")
+        p_type = p_type_obj.browse(cr, uid, picking_type_id, context=context)
+        if p_type.default_location_src_id and p_type.default_location_src_id.usage == 'internal' and p_type.default_location_dest_id and p_type.default_location_dest_id.usage == 'customer':
+            return {'value': {'stock_location_id': p_type.default_location_src_id.id}}
+        return False
 
     def set_active(self, cr, uid, ids, context=None):
         return self.write(cr, uid, ids, {'state' : 'active'}, context=context)
@@ -334,7 +350,7 @@ class pos_session(osv.osv):
         # the .xml files as the CoA is not yet installed.
         jobj = self.pool.get('pos.config')
         pos_config = jobj.browse(cr, uid, config_id, context=context)
-        context.update({'company_id': pos_config.warehouse_id.company_id.id})
+        context.update({'company_id': pos_config.company_id.id})
         if not pos_config.journal_id:
             jid = jobj.default_get(cr, uid, ['journal_id'], context=context)['journal_id']
             if jid:
@@ -361,7 +377,7 @@ class pos_session(osv.osv):
             bank_values = {
                 'journal_id' : journal.id,
                 'user_id' : uid,
-                'company_id' : pos_config.warehouse_id.company_id.id
+                'company_id' : pos_config.company_id.id
             }
             statement_id = self.pool.get('account.bank.statement').create(cr, uid, bank_values, context=context)
             bank_statement_ids.append(statement_id)
@@ -441,19 +457,13 @@ class pos_session(osv.osv):
                 if st.difference and st.journal_id.cash_control == True:
                     if st.difference > 0.0:
                         name= _('Point of Sale Profit')
-                        account_id = st.journal_id.profit_account_id.id
                     else:
-                        account_id = st.journal_id.loss_account_id.id
                         name= _('Point of Sale Loss')
-                    if not account_id:
-                        raise osv.except_osv( _('Error!'),
-                        _("Please set your profit and loss accounts on your payment method '%s'. This will allow OpenERP to post the difference of %.2f in your ending balance. To close this session, you can update the 'Closing Cash Control' to avoid any difference.") % (st.journal_id.name,st.difference))
                     bsl.create(cr, uid, {
                         'statement_id': st.id,
                         'amount': st.difference,
                         'ref': record.name,
                         'name': name,
-                        'account_id': account_id
                     }, context=context)
 
                 if st.journal_id.type == 'bank':
@@ -513,8 +523,7 @@ class pos_order(osv.osv):
     _description = "Point of Sale"
     _order = "id desc"
 
-    def create_from_ui(self, cr, uid, orders, context=None):      
-        
+    def create_from_ui(self, cr, uid, orders, context=None):
         # Keep only new orders
         submitted_references = [o['data']['name'] for o in orders]
         existing_order_ids = self.search(cr, uid, [('pos_reference', 'in', submitted_references)], context=context)
@@ -605,7 +614,6 @@ class pos_order(osv.osv):
         return {'value': {'pricelist_id': pricelist}}
 
     def _amount_all(self, cr, uid, ids, name, args, context=None):
-        tax_obj = self.pool.get('account.tax')
         cur_obj = self.pool.get('res.currency')
         res = {}
         for order in self.browse(cr, uid, ids, context=context):
@@ -644,7 +652,6 @@ class pos_order(osv.osv):
     _columns = {
         'name': fields.char('Order Ref', size=64, required=True, readonly=True),
         'company_id':fields.many2one('res.company', 'Company', required=True, readonly=True),
-        'warehouse_id': fields.related('session_id', 'config_id', 'warehouse_id', relation='stock.warehouse', type='many2one', string='Warehouse', store=True, readonly=True),
         'date_order': fields.datetime('Order Date', readonly=True, select=True),
         'user_id': fields.many2one('res.users', 'Salesman', help="Person who uses the the cash register. It can be a reliever, a student or an interim employee."),
         'amount_tax': fields.function(_amount_all, string='Taxes', digits_compute=dp.get_precision('Account'), multi='all'),
@@ -673,6 +680,8 @@ class pos_order(osv.osv):
         'invoice_id': fields.many2one('account.invoice', 'Invoice'),
         'account_move': fields.many2one('account.move', 'Journal Entry', readonly=True),
         'picking_id': fields.many2one('stock.picking', 'Picking', readonly=True),
+        'picking_type_id': fields.related('session_id', 'config_id', 'picking_type_id', string="Picking Type", type='many2one', relation='stock.picking.type'),
+        'location_id': fields.related('session_id', 'config_id', 'stock_location_id', string="Location", type='many2one', store=True, relation='stock.location'),
         'note': fields.text('Internal Notes'),
         'nb_print': fields.integer('Number of Print', readonly=True),
         'pos_reference': fields.char('Receipt Ref', size=64, readonly=True),
@@ -690,6 +699,10 @@ class pos_order(osv.osv):
             session_record = self.pool.get('pos.session').browse(cr, uid, session_ids, context=context)
             return session_record.config_id.pricelist_id and session_record.config_id.pricelist_id.id or False
         return False
+
+    def _get_out_picking_type(self, cr, uid, context=None):
+        return self.pool.get('ir.model.data').xmlid_to_res_id(
+                    cr, uid, 'point_of_sale.picking_type_posout', context=context)
 
     _defaults = {
         'user_id': lambda self, cr, uid, context: uid,
@@ -720,49 +733,62 @@ class pos_order(osv.osv):
 
     def create_picking(self, cr, uid, ids, context=None):
         """Create a picking for each order and validate it."""
-        picking_obj = self.pool.get('stock.picking.out')
+        picking_obj = self.pool.get('stock.picking')
         partner_obj = self.pool.get('res.partner')
         move_obj = self.pool.get('stock.move')
 
         for order in self.browse(cr, uid, ids, context=context):
             addr = order.partner_id and partner_obj.address_get(cr, uid, [order.partner_id.id], ['delivery']) or {}
-            picking_id = picking_obj.create(cr, uid, {
-                'origin': order.name,
-                'partner_id': addr.get('delivery',False),
-                'type': 'out',
-                'company_id': order.company_id.id,
-                'move_type': 'direct',
-                'note': order.note or "",
-                'invoice_state': 'none',
-                'auto_picking': True,
-            }, context=context)
-            self.write(cr, uid, [order.id], {'picking_id': picking_id}, context=context)
-            location_id = order.warehouse_id.lot_stock_id.id
+            picking_type = order.picking_type_id
+            picking_id = False
+            if picking_type:
+                picking_id = picking_obj.create(cr, uid, {
+                    'origin': order.name,
+                    'partner_id': addr.get('delivery',False),
+                    'picking_type_id': picking_type.id,
+                    'company_id': order.company_id.id,
+                    'move_type': 'direct',
+                    'note': order.note or "",
+                    'invoice_state': 'none',
+                }, context=context)
+                self.write(cr, uid, [order.id], {'picking_id': picking_id}, context=context)
+            location_id = order.location_id.id
             if order.partner_id:
                 destination_id = order.partner_id.property_stock_customer.id
+            elif picking_type:
+                if not picking_type.default_location_dest_id:
+                    raise osv.except_osv(_('Error!'), _('Missing source or destination location for picking type %s. Please configure those fields and try again.' % (picking_type.name,)))
+                destination_id = picking_type.default_location_dest_id.id
             else:
                 destination_id = partner_obj.default_get(cr, uid, ['property_stock_customer'], context=context)['property_stock_customer']
 
+            move_list = []
             for line in order.lines:
                 if line.product_id and line.product_id.type == 'service':
                     continue
 
-                move_obj.create(cr, uid, {
+                move_list.append(move_obj.create(cr, uid, {
                     'name': line.name,
                     'product_uom': line.product_id.uom_id.id,
                     'product_uos': line.product_id.uom_id.id,
                     'picking_id': picking_id,
+                    'picking_type_id': picking_type.id, 
                     'product_id': line.product_id.id,
                     'product_uos_qty': abs(line.qty),
-                    'product_qty': abs(line.qty),
-                    'tracking_id': False,
+                    'product_uom_qty': abs(line.qty),
                     'state': 'draft',
                     'location_id': location_id if line.qty >= 0 else destination_id,
                     'location_dest_id': destination_id if line.qty >= 0 else location_id,
-                }, context=context)
-            
-            picking_obj.signal_button_confirm(cr, uid, [picking_id])
-            picking_obj.force_assign(cr, uid, [picking_id], context)
+                }, context=context))
+                
+            if picking_id:
+                picking_obj.action_confirm(cr, uid, [picking_id], context=context)
+                picking_obj.force_assign(cr, uid, [picking_id], context=context)
+                picking_obj.action_done(cr, uid, [picking_id], context=context)
+            elif move_list:
+                move_obj.action_confirm(cr, uid, move_list, context=context)
+                move_obj.force_assign(cr, uid, move_list, context=context)
+                move_obj.action_done(cr, uid, move_list, context=context)
         return True
 
     def cancel_order(self, cr, uid, ids, context=None):
@@ -771,7 +797,7 @@ class pos_order(osv.osv):
         """
         stock_picking_obj = self.pool.get('stock.picking')
         for order in self.browse(cr, uid, ids, context=context):
-            stock_picking_obj.signal_button_cancel(cr, uid, [order.picking_id.id])
+            stock_picking_obj.action_cancel(cr, uid, [order.picking_id.id])
             if stock_picking_obj.browse(cr, uid, order.picking_id.id, context=context).state <> 'cancel':
                 raise osv.except_osv(_('Error!'), _('Unable to cancel the picking.'))
         self.write(cr, uid, ids, {'state': 'cancel'}, context=context)
@@ -788,19 +814,8 @@ class pos_order(osv.osv):
             'amount': data['amount'],
             'date': data.get('payment_date', time.strftime('%Y-%m-%d')),
             'name': order.name + ': ' + (data.get('payment_name', '') or ''),
+            'partner_id': order.partner_id and order.partner_id.id or None,
         }
-
-        account_def = property_obj.get(cr, uid, 'property_account_receivable', 'res.partner', context=context)
-        args['account_id'] = (order.partner_id and order.partner_id.property_account_receivable \
-                             and order.partner_id.property_account_receivable.id) or (account_def and account_def.id) or False
-        args['partner_id'] = order.partner_id and order.partner_id.id or None
-
-        if not args['account_id']:
-            if not args['partner_id']:
-                msg = _('There is no receivable account defined to make payment.')
-            else:
-                msg = _('There is no receivable account defined to make payment for the partner: "%s" (id:%d).') % (order.partner_id.name, order.partner_id.id,)
-            raise osv.except_osv(_('Configuration Error!'), msg)
 
         context.pop('pos_session_id', False)
 
@@ -823,7 +838,6 @@ class pos_order(osv.osv):
             'statement_id' : statement_id,
             'pos_statement_id' : order_id,
             'journal_id' : journal_id,
-            'type' : 'customer',
             'ref' : order.session_id.name,
         })
 
@@ -856,9 +870,7 @@ class pos_order(osv.osv):
                     'qty': -order_line.qty
                 }, context=context)
 
-        new_order = ','.join(map(str,clone_list))
         abs = {
-            #'domain': "[('id', 'in', ["+new_order+"])]",
             'name': _('Return Products'),
             'view_type': 'form',
             'view_mode': 'form',
@@ -920,8 +932,6 @@ class pos_order(osv.osv):
                                                                line.product_id.uom_id.id,
                                                                line.qty, partner_id = order.partner_id.id,
                                                                fposition_id=order.partner_id.property_account_position.id)['value'])
-                if line.product_id.description_sale:
-                    inv_line['note'] = line.product_id.description_sale
                 inv_line['price_unit'] = line.price_unit
                 inv_line['discount'] = line.discount
                 inv_line['name'] = inv_name
@@ -1288,30 +1298,80 @@ class ean_wizard(osv.osv_memory):
             self.pool[m].write(cr,uid,[m_id],{'ean13':ean13})
         return { 'type' : 'ir.actions.act_window_close' }
 
-class product_product(osv.osv):
-    _inherit = 'product.product'
+class pos_category(osv.osv):
+    _name = "pos.category"
+    _description = "Public Category"
+    _order = "sequence, name"
 
+    _constraints = [
+        (osv.osv._check_recursion, 'Error ! You cannot create recursive categories.', ['parent_id'])
+    ]
 
-    #def _get_small_image(self, cr, uid, ids, prop, unknow_none, context=None):
-    #    result = {}
-    #    for obj in self.browse(cr, uid, ids, context=context):
-    #        if not obj.product_image:
-    #            result[obj.id] = False
-    #            continue
+    def name_get(self, cr, uid, ids, context=None):
+        if not len(ids):
+            return []
+        reads = self.read(cr, uid, ids, ['name','parent_id'], context=context)
+        res = []
+        for record in reads:
+            name = record['name']
+            if record['parent_id']:
+                name = record['parent_id'][1]+' / '+name
+            res.append((record['id'], name))
+        return res
 
-    #        image_stream = io.BytesIO(obj.product_image.decode('base64'))
-    #        img = Image.open(image_stream)
-    #        img.thumbnail((120, 100), Image.ANTIALIAS)
-    #        img_stream = StringIO.StringIO()
-    #        img.save(img_stream, "JPEG")
-    #        result[obj.id] = img_stream.getvalue().encode('base64')
-    #    return result
+    def _name_get_fnc(self, cr, uid, ids, prop, unknow_none, context=None):
+        res = self.name_get(cr, uid, ids, context=context)
+        return dict(res)
+
+    def _get_image(self, cr, uid, ids, name, args, context=None):
+        result = dict.fromkeys(ids, False)
+        for obj in self.browse(cr, uid, ids, context=context):
+            result[obj.id] = tools.image_get_resized_images(obj.image)
+        return result
+    
+    def _set_image(self, cr, uid, id, name, value, args, context=None):
+        return self.write(cr, uid, [id], {'image': tools.image_resize_image_big(value)}, context=context)
+
+    _columns = {
+        'name': fields.char('Name', required=True, translate=True),
+        'complete_name': fields.function(_name_get_fnc, type="char", string='Name'),
+        'parent_id': fields.many2one('pos.category','Parent Category', select=True),
+        'child_id': fields.one2many('pos.category', 'parent_id', string='Children Categories'),
+        'sequence': fields.integer('Sequence', help="Gives the sequence order when displaying a list of product categories."),
+        
+        # NOTE: there is no 'default image', because by default we don't show thumbnails for categories. However if we have a thumbnail
+        # for at least one category, then we display a default image on the other, so that the buttons have consistent styling.
+        # In this case, the default image is set by the js code.
+        # NOTE2: image: all image fields are base64 encoded and PIL-supported
+        'image': fields.binary("Image",
+            help="This field holds the image used as image for the cateogry, limited to 1024x1024px."),
+        'image_medium': fields.function(_get_image, fnct_inv=_set_image,
+            string="Medium-sized image", type="binary", multi="_get_image",
+            store={
+                'pos.category': (lambda self, cr, uid, ids, c={}: ids, ['image'], 10),
+            },
+            help="Medium-sized image of the category. It is automatically "\
+                 "resized as a 128x128px image, with aspect ratio preserved. "\
+                 "Use this field in form views or some kanban views."),
+        'image_small': fields.function(_get_image, fnct_inv=_set_image,
+            string="Smal-sized image", type="binary", multi="_get_image",
+            store={
+                'pos.category': (lambda self, cr, uid, ids, c={}: ids, ['image'], 10),
+            },
+            help="Small-sized image of the category. It is automatically "\
+                 "resized as a 64x64px image, with aspect ratio preserved. "\
+                 "Use this field anywhere a small image is required."),
+    }
+
+class product_template(osv.osv):
+    _inherit = 'product.template'
 
     _columns = {
         'income_pdt': fields.boolean('Point of Sale Cash In', help="Check if, this is a product you can use to put cash into a statement for the point of sale backend."),
         'expense_pdt': fields.boolean('Point of Sale Cash Out', help="Check if, this is a product you can use to take cash from a statement for the point of sale backend, example: money lost, transfer to bank, etc."),
         'available_in_pos': fields.boolean('Available in the Point of Sale', help='Check if you want this product to appear in the Point of Sale'), 
         'to_weight' : fields.boolean('To Weigh', help="Check if the product should be weighted (mainly used with self check-out interface)."),
+        'pos_categ_id': fields.many2one('pos.category','Point of Sale Category', help="Those categories are used to group similar products for point of sale."),
     }
 
     _defaults = {

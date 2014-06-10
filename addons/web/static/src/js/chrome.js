@@ -872,6 +872,10 @@ instance.web.Menu =  instance.web.Widget.extend({
                 $clicked_menu.parent().addClass('active');
             }
         }
+        // add a tooltip to cropped menu items
+        this.$secondary_menus.find('.oe_secondary_submenu li a span').each(function() {
+            $(this).tooltip(this.scrollWidth > this.clientWidth ? {title: $(this).text().trim(), placement: 'auto right'} :'destroy');
+       });
     },
     /**
      * Call open_menu with the first menu_item matching an action_id
@@ -1091,8 +1095,8 @@ instance.web.Client = instance.web.Widget.extend({
     },
     bind_events: function() {
         var self = this;
-        this.$el.on('mouseenter', '.oe_systray > div:not([data-tipsy=true])', function() {
-            $(this).attr('data-tipsy', 'true').tipsy().trigger('mouseenter');
+        this.$el.on('mouseenter', '.oe_systray > div:not([data-toggle=tooltip])', function() {
+            $(this).attr('data-toggle', 'tooltip').tooltip().trigger('mouseenter');
         });
         this.$el.on('click', '.oe_dropdown_toggle', function(ev) {
             ev.preventDefault();
@@ -1116,7 +1120,7 @@ instance.web.Client = instance.web.Widget.extend({
             }, 0);
         });
         instance.web.bus.on('click', this, function(ev) {
-            $.fn.tipsy.clear();
+            $.fn.tooltip('destroy');
             if (!$(ev.target).is('input[type=file]')) {
                 self.$el.find('.oe_dropdown_menu.oe_opened, .oe_dropdown_toggle.oe_opened').removeClass('oe_opened');
             }
@@ -1470,7 +1474,7 @@ instance.web.embed = function (origin, dbname, login, key, action, options) {
     $('head').append($('<link>', {
         'rel': 'stylesheet',
         'type': 'text/css',
-        'href': origin +'/web/webclient/css'
+        'href': origin +'/web/css/web.assets_webclient'
     }));
     var currentScript = document.currentScript;
     if (!currentScript) {

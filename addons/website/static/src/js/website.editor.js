@@ -470,8 +470,14 @@
             });
             menu.on('click', 'a[data-action!=ace]', function (event) {
                 var view_id = $(event.currentTarget).data('view-id');
-                openerp.jsonRpc('/website/customize_template_toggle', 'call', {
-                    'view_id': view_id
+                return openerp.jsonRpc('/web/dataset/call_kw', 'call', {
+                    model: 'ir.ui.view',
+                    method: 'toggle',
+                    args: [],
+                    kwargs: {
+                        ids: [parseInt(view_id, 10)],
+                        context: website.get_context()
+                    }
                 }).then( function() {
                     window.location.reload();
                 });
@@ -545,7 +551,7 @@
 
             observer.disconnect();
             var editor = this.rte.editor;
-            var root = editor.element.$;
+            var root = editor.element && editor.element.$;
             editor.destroy();
             // FIXME: select editables then filter by dirty?
             var defs = this.rte.fetch_editables(root)

@@ -34,7 +34,6 @@ function openerp_pos_models(instance, module){ //module is instance.point_of_sal
             this.company_logo = null;
             this.company_logo_base64 = '';
             this.currency = null;
-            this.shop = null;
             this.company = null;
             this.user = null;
             this.users = [];
@@ -174,7 +173,7 @@ function openerp_pos_models(instance, module){ //module is instance.point_of_sal
 
                     return self.fetch(
                         'pos.config',
-                        ['name','journal_ids','warehouse_id','journal_id','pricelist_id',
+                        ['name','journal_ids','journal_id','pricelist_id',
                          'iface_self_checkout', 'iface_led', 'iface_cashdrawer',
                          'iface_payment_terminal', 'iface_electronic_scale', 'iface_barscan', 
                          'iface_vkeyboard','iface_print_via_proxy','iface_scan_via_proxy',
@@ -190,10 +189,6 @@ function openerp_pos_models(instance, module){ //module is instance.point_of_sal
                                             self.config.iface_print_via_proxy  ||
                                             self.config.iface_scan_via_proxy   ||
                                             self.config.iface_cashdrawer;
-
-                    return self.fetch('stock.warehouse',[],[['id','=', self.config.warehouse_id[0]]]);
-                }).then(function(shops){
-                    self.shop = shops[0];
 
                     return self.fetch('product.pricelist',['currency_id'],[['id','=',self.config.pricelist_id[0]]]);
                 }).then(function(pricelists){
@@ -213,13 +208,13 @@ function openerp_pos_models(instance, module){ //module is instance.point_of_sal
                 }).then(function(packagings){
                     self.db.add_packagings(packagings);
 
-                    return self.fetch('product.public.category', ['id','name','parent_id','child_id','image'])
+                    return self.fetch('pos.category', ['id','name','parent_id','child_id','image'])
                 }).then(function(categories){
                     self.db.add_categories(categories);
 
                     return self.fetch(
                         'product.product', 
-                        ['name', 'list_price','price','public_categ_id', 'taxes_id', 'ean13', 'default_code', 'variants',
+                        ['name', 'list_price','price','pos_categ_id', 'taxes_id', 'ean13', 'default_code', 'variants',
                          'to_weight', 'uom_id', 'uos_id', 'uos_coeff', 'mes_type', 'description_sale', 'description'],
                         [['sale_ok','=',true],['available_in_pos','=',true]],
                         {pricelist: self.pricelist.id} // context for price
@@ -954,7 +949,6 @@ function openerp_pos_models(instance, module){ //module is instance.point_of_sal
             var client  = this.get('client');
             var cashier = this.pos.cashier || this.pos.user;
             var company = this.pos.company;
-            var shop    = this.pos.shop;
             var date = new Date();
 
             return {
@@ -998,9 +992,6 @@ function openerp_pos_models(instance, module){ //module is instance.point_of_sal
                     name: company.name,
                     phone: company.phone,
                     logo:  this.pos.company_logo_base64,
-                },
-                shop:{
-                    name: shop.name,
                 },
                 currency: this.pos.currency,
             };
