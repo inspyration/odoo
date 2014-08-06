@@ -408,7 +408,8 @@ class Field(object):
         self.depends = ('.'.join(self.related),)
         self.compute = self._compute_related
         self.inverse = self._inverse_related
-        self.search = self._search_related
+        if field._description_searchable(env):
+            self.search = self._search_related
 
         # copy attributes from field to self (string, help, etc.)
         for attr, prop in self.related_attrs:
@@ -524,23 +525,27 @@ class Field(object):
     def get_description(self, env):
         """ Return a dictionary that describes the field `self`. """
         desc = {'type': self.type}
-        # determine 'store'
-        if self.store:
-            # if the corresponding column is a function field, check the column
-            column = env[self.model_name]._columns.get(self.name)
-            desc['store'] = bool(getattr(column, 'store', True))
-        else:
-            desc['store'] = False
-        # determine other attributes
         for attr, prop in self.description_attrs:
             value = getattr(self, prop)
             if callable(value):
                 value = value(env)
-            if value:
+            if value is not None:
                 desc[attr] = value
+
         return desc
 
     # properties used by get_description()
+
+    def _description_store(self, env):
+        if self.store:
+            # if the corresponding column is a function field, check the column
+            column = env[self.model_name]._columns.get(self.name)
+            return bool(getattr(column, 'store', True))
+        return False
+
+    def _description_searchable(self, env):
+        return self._description_store(env) or bool(self.search)
+
     _description_depends = property(attrgetter('depends'))
     _description_related = property(attrgetter('related'))
     _description_company_dependent = property(attrgetter('company_dependent'))
@@ -1111,12 +1116,16 @@ class Selection(Field):
             It is given as either a list of pairs (`value`, `string`), or a
             model method, or a method name.
 
+        :param selection_add: provides an extension of the selection in the case
+            of an overridden field. It is a list of pairs (`value`, `string`).
+
         The attribute `selection` is mandatory except in the case of related
         fields (see :ref:`field-related`) or field extensions
         (see :ref:`field-incremental-definition`).
     """
     type = 'selection'
-    selection = None        # [(value, string), ...], model method or method name
+    selection = None        # [(value, string), ...], function or method name
+    selection_add = None    # [(value, string), ...]
 
     def __init__(self, selection=None, string=None, **kwargs):
         if callable(selection):
@@ -1129,6 +1138,23 @@ class Selection(Field):
         # selection must be computed on related field
         field = self.related_field
         self.selection = lambda model: field._description_selection(model.env)
+
+    def _setup_regular(self, env):
+        super(Selection, self)._setup_regular(env)
+        # determine selection (applying extensions)
+        cls = type(env[self.model_name])
+        selection = None
+        for field in resolve_all_mro(cls, self.name, reverse=True):
+            if isinstance(field, type(self)):
+                # We cannot use field.selection or field.selection_add here
+                # because those attributes are overridden by `set_class_name`.
+                if 'selection' in field._attrs:
+                    selection = field._attrs['selection']
+                if 'selection_add' in field._attrs:
+                    selection = selection + field._attrs['selection_add']
+            else:
+                selection = None
+        self.selection = selection
 
     def _description_selection(self, env):
         """ return the selection list (pairs (value, label)); labels are
