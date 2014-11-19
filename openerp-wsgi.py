@@ -14,7 +14,18 @@
 
 import openerp
 from os import sep
-from os.path import curdir, realpath
+from os.path import dirname, realpath
+import inspect
+
+
+#>>> import os
+#>>> import inspect
+#>>> inspect.getfile(os)
+#'/usr/lib64/python2.7/os.pyc'
+#>>> inspect.getfile(inspect)
+#'/usr/lib64/python2.7/inspect.pyc'
+#>>> os.path.dirname(inspect.getfile(inspect))
+#'/usr/lib64/python2.7'
 
 
 #----------------------------------------------------------
@@ -29,7 +40,8 @@ conf = openerp.tools.config
 # Path to the OpenERP Addons repository (comma-separated for
 # multiple locations)
 
-base_path = realpath(curdir)
+#base_path = realpath(dirname(__file__))
+base_path = realpath(dirname(inspect.getfile(inspect.currentframe())))
 
 addons_path_base = sep.join((base_path, "addons"))
 
