@@ -13,6 +13,9 @@
 #   $ gunicorn openerp:service.wsgi_server.application -c openerp-wsgi.py
 
 import openerp
+from os import sep
+from os.path import curdir, realpath
+
 
 #----------------------------------------------------------
 # Common
@@ -26,7 +29,22 @@ conf = openerp.tools.config
 # Path to the OpenERP Addons repository (comma-separated for
 # multiple locations)
 
-conf['addons_path'] = '/opt/odoo/addons,/opt/odoo/include/custom/8.0'
+base_path = realpath(curdir)
+
+addons_path_base = sep.join((base_path, "addons"))
+
+addons_path_include = ",".join(sep.join((base_path, "include", path)) for path in (
+    "account-analytic",
+#    "account-closing",
+    "account-financial-reporting",
+    "account-financial-tools",
+    "account-invoicing",
+    "acsone-addons",
+    "bank-statement-reconcile",
+    "custom/8.0",
+))
+
+conf["addons_path"] = ",".join((addons_path_base, addons_path_include))
 
 # Optional database config if not using local socket
 #conf['db_name'] = 'mycompany'
