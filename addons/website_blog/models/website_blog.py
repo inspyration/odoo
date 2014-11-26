@@ -30,6 +30,9 @@ class BlogTag(osv.Model):
     _order = 'name'
     _columns = {
         'name': fields.char('Name', required=True),
+        'post_ids': fields.many2many(
+            'blog.post', string='Posts',
+        ),
     }
 
 
@@ -92,6 +95,9 @@ class BlogPost(osv.Model):
             'res.users', 'Last Contributor',
             select=True, readonly=True,
         ),
+        'author_avatar': fields.related(
+            'author_id', 'image_small',
+            string="Avatar", type="binary"),
         'visits': fields.integer('No of Views'),
         'ranking': fields.function(_compute_ranking, string='Ranking', type='float'),
     }

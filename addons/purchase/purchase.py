@@ -150,7 +150,15 @@ class purchase_order(osv.osv):
 
     def _get_picking_in(self, cr, uid, context=None):
         obj_data = self.pool.get('ir.model.data')
-        return obj_data.get_object_reference(cr, uid, 'stock','picking_type_in') and obj_data.get_object_reference(cr, uid, 'stock','picking_type_in')[1] or False
+        type_obj = self.pool.get('stock.picking.type')
+        user_obj = self.pool.get('res.users')
+        company_id = user_obj.browse(cr, uid, uid, context=context).company_id.id
+        types = type_obj.search(cr, uid, [('code', '=', 'incoming'), ('warehouse_id.company_id', '=', company_id)], context=context)
+        if not types:
+            types = type_obj.search(cr, uid, [('code', '=', 'incoming'), ('warehouse_id', '=', False)], context=context)
+            if not types:
+                raise osv.except_osv(_('Error!'), _("Make sure you have at least an incoming picking type defined"))
+        return types[0]
 
     def _get_picking_ids(self, cr, uid, ids, field_names, args, context=None):
         res = {}
@@ -701,7 +709,7 @@ class purchase_order(osv.osv):
         product_uom = self.pool.get('product.uom')
         price_unit = order_line.price_unit
         if order_line.product_uom.id != order_line.product_id.uom_id.id:
-            price_unit *= order_line.product_uom.factor
+            price_unit *= order_line.product_uom.factor / order_line.product_id.uom_id.factor
         if order.currency_id.id != order.company_id.currency_id.id:
             #we don't round the price_unit, as we may want to store the standard price with more digits than allowed by the currency
             price_unit = self.pool.get('res.currency').compute(cr, uid, order.currency_id.id, order.company_id.currency_id.id, price_unit, round=False, context=context)
