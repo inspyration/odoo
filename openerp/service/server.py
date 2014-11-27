@@ -125,13 +125,12 @@ class FSWatcher(object):
         if isinstance(event, (FileCreatedEvent, FileModifiedEvent)):
             if not event.is_directory:
                 path = event.src_path
-                # TODO: assets bundle cache invalidation
                 if path.endswith('.py'):
                     try:
                         source = open(path, 'rb').read() + '\n'
                         compile(source, path, 'exec')
                     except SyntaxError:
-                        _logger.info('autoreload: python code change detected, SyntaxError in %s', path)
+                        _logger.error('autoreload: python code change detected, SyntaxError in %s', path)
                     else:
                         _logger.info('autoreload: python code updated, autoreload activated')
                         restart()
@@ -204,8 +203,8 @@ class ThreadedServer(CommonServer):
             time.sleep(SLEEP_INTERVAL + number)     # Steve Reich timing style
             registries = openerp.modules.registry.RegistryManager.registries
             _logger.debug('cron%d polling for jobs', number)
-            for db_name, registry in registries.items():
-                while True and registry.ready:
+            for db_name, registry in registries.iteritems():
+                while registry.ready:
                     acquired = openerp.addons.base.ir.ir_cron.ir_cron._acquire_job(db_name)
                     if not acquired:
                         break
@@ -347,7 +346,11 @@ class GeventServer(CommonServer):
         gevent.spawn(self.watch_parent)
         self.httpd = WSGIServer((self.interface, self.port), self.app)
         _logger.info('Evented Service (longpolling) running on %s:%s', self.interface, self.port)
-        self.httpd.serve_forever()
+        try:
+            self.httpd.serve_forever()
+        except:
+            _logger.exception("Evented Service (longpolling): uncaught error during main loop")
+            raise
 
     def stop(self):
         import gevent
@@ -429,6 +432,8 @@ class PreforkServer(CommonServer):
         self.long_polling_pid = popen.pid
 
     def worker_pop(self, pid):
+        if pid == self.long_polling_pid:
+            self.long_polling_pid = None
         if pid in self.workers:
             _logger.debug("Worker (%s) unregistered", pid)
             try:
@@ -882,21 +887,19 @@ def start(preload=None, stop=False):
     else:
         server = ThreadedServer(openerp.service.wsgi_server.application)
 
-    if watchdog:
-        if config['dev_mode']:
+    watcher = None
+    if config['dev_mode']:
+        if watchdog:
             watcher = FSWatcher()
             watcher.start()
-    else:
-        intro = "'watchdog' module not installed."
-        # _logger.warning("%s Asset Bundles automatic cache invalidation disabled." % intro)
-        if config['dev_mode']:
-            _logger.warning("%s Code autoreload feature is disabled" % intro)
+        else:
+            _logger.warning("'watchdog' module not installed. Code autoreload feature is disabled")
 
     rc = server.run(preload, stop)
 
     # like the legend of the phoenix, all ends with beginnings
     if getattr(openerp, 'phoenix', False):
-        if watchdog and config['dev_mode']:
+        if watcher:
             watcher.stop()
         _reexec()
 
