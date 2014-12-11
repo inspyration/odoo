@@ -1,0 +1,6 @@
+[submodule "addons/house_booking"]
+	path = addons/house_booking
+	url = https://github.com/inspyration/house_booking.git
+[submodule "addons/website_house_booking"]
+	path = addons/website_house_booking
+	url = https://github.com/inspyration/website_house_booking.git
