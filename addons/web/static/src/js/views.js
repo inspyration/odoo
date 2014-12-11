@@ -407,7 +407,7 @@ instance.web.ActionManager = instance.web.Widget.extend({
             this.dialog_widget.setParent(this.dialog);
             var initialized = this.dialog_widget.appendTo(this.dialog.$el);
             this.dialog.open();
-            return initialized;
+            return $.when(initialized);
         }
         if (this.inner_widget && this.webclient.has_uncommitted_changes()) {
             return $.Deferred().reject();
@@ -638,7 +638,7 @@ instance.web.ViewManager =  instance.web.Widget.extend({
         if (!view) {
             return $.Deferred().reject();
         }
-        if (view_type !== 'form') {
+        if ((view_type !== 'form') && (view_type !== 'diagram')) {
             this.view_stack = [];
         } 
 
@@ -828,16 +828,15 @@ instance.web.ViewManager =  instance.web.Widget.extend({
         }
     },    
     do_load_state: function(state, warm) {
-        var self = this,
-            def = this.active_view.created;
         if (state.view_type && state.view_type !== this.active_view.type) {
-            def = def.then(function() {
-                return self.switch_mode(state.view_type, true);
-            });
+            // warning: this code relies on the fact that switch_mode has an immediate side
+            // effect (setting the 'active_view' to its new value) AND an async effect (the
+            // view is created/loaded).  So, the next statement (do_load_state) is executed 
+            // on the new view, after it was initialized, but before it is fully loaded and 
+            // in particular, before the do_show method is called.
+            this.switch_mode(state.view_type, true);
         } 
-        def.done(function() {
-            self.active_view.controller.do_load_state(state, warm);
-        });
+        this.active_view.controller.do_load_state(state, warm);
     },
     on_debug_changed: function (evt) {
         var self = this,
@@ -957,6 +956,8 @@ instance.web.ViewManager =  instance.web.Widget.extend({
                         data: {action: JSON.stringify(action)},
                         complete: instance.web.unblockUI
                     });
+                } else {
+                    self.do_warn("Warning", "No record selected.");
                 }
                 break;
             case 'leave_debug':
