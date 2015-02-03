@@ -1,6 +1,81 @@
 [submodule "addons/house_booking"]
 	path = addons/house_booking
-	url = git@github.com:inspyration/house_booking.git
+	url = https://github.com/inspyration/house_booking.git
 [submodule "addons/website_house_booking"]
 	path = addons/website_house_booking
-	url = git@github.com:inspyration/website_house_booking.git
+	url = https://github.com/inspyration/website_house_booking.git
+[submodule "parts/partner-contact"]
+	path = parts/partner-contact
+	url = https://github.com/inspyration/partner-contact.git
+[submodule "parts/bank-payment"]
+	path = parts/bank-payment
+	url = https://github.com/inspyration/bank-payment.git
+[submodule "parts/vertical-ngo"]
+	path = parts/vertical-ngo
+	url = https://github.com/inspyration/vertical-ngo.git
+[submodule "parts/connector-telephony"]
+	path = parts/connector-telephony
+	url = https://github.com/inspyration/connector-telephony.git
+[submodule "parts/knowledge"]
+	path = parts/knowledge
+	url = https://github.com/inspyration/knowledge.git
+[submodule "parts/sale-workflow"]
+	path = parts/sale-workflow
+	url = https://github.com/inspyration/sale-workflow.git
+[submodule "parts/product-attribute"]
+	path = parts/product-attribute
+	url = https://github.com/inspyration/product-attribute.git
+[submodule "parts/purchase-workflow"]
+	path = parts/purchase-workflow
+	url = https://github.com/inspyration/purchase-workflow.git
+[submodule "parts/stock-logistics-workflow"]
+	path = parts/stock-logistics-workflow
+	url = https://github.com/inspyration/stock-logistics-workflow.git
+[submodule "parts/server-tools"]
+	path = parts/server-tools
+	url = https://github.com/inspyration/server-tools.git
+[submodule "parts/account-financial-tools"]
+	path = parts/account-financial-tools
+	url = https://github.com/inspyration/account-financial-tools.git
+[submodule "parts/vertical-travel"]
+	path = parts/vertical-travel
+	url = https://github.com/inspyration/vertical-travel.git
+[submodule "parts/acsone-parts"]
+	path = parts/acsone-parts
+	url = https://github.com/inspyration/acsone-addons.git
+[submodule "parts/account-financial-reporting"]
+	path = parts/account-financial-reporting
+	url = https://github.com/inspyration/account-financial-reporting.git
+[submodule "parts/account-invoicing"]
+	path = parts/account-invoicing
+	url = https://github.com/inspyration/account-invoicing.git
+[submodule "parts/account-analytic"]
+	path = parts/account-analytic
+	url = https://github.com/inspyration/account-analytic.git
+[submodule "parts/stock-logistics-warehouse"]
+	path = parts/stock-logistics-warehouse
+	url = https://github.com/inspyration/stock-logistics-warehouse.git
+[submodule "parts/bank-statement-reconcile"]
+	path = parts/bank-statement-reconcile
+	url = https://github.com/inspyration/bank-statement-reconcile.git
+[submodule "parts/department"]
+	path = parts/department
+	url = https://github.com/inspyration/department.git
+[submodule "parts/stock-logistics-barcode"]
+	path = parts/stock-logistics-barcode
+	url = https://github.com/inspyration/stock-logistics-barcode.git
+[submodule "parts/l10n-luxemburg"]
+	path = parts/l10n-luxemburg
+	url = https://github.com/inspyration/l10n-luxemburg.git
+[submodule "parts/community-data-files"]
+	path = parts/community-data-files
+	url = https://github.com/inspyration/community-data-files.git
+[submodule "parts/account-closing"]
+	path = parts/account-closing
+	url = https://github.com/inspyration/account-closing.git
+[submodule "parts/vertical-hotel"]
+	path = parts/vertical-hotel
+	url = https://github.com/inspyration/vertical-hotel.git
+[submodule "parts/geospatial"]
+	path = parts/geospatial
+	url = https://github.com/inspyration/geospatial.git
