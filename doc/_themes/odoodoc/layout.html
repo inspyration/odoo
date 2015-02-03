@@ -6,12 +6,17 @@
   '_static/bootstrap/js/tooltip.js',
   '_static/bootstrap/js/collapse.js',
   '_static/bootstrap/js/dropdown.js',
-  '_static/zeroclipboard-2.1.6/ZeroClipboard.min.js',
   '_static/app.js'
 ] %}
 
 {%- block doctype -%}
 <!doctype html>
+{%- endblock -%}
+
+{%- block htmltitle -%}
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {{ super() }}
 {%- endblock -%}
 
 {%- block extrahead -%}

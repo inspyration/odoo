@@ -23,6 +23,7 @@ from openerp.osv import fields, osv
 from openerp.tools.translate import _
 import openerp.addons.decimal_precision as dp
 from openerp.report import report_sxw
+from openerp.tools import float_compare, float_round
 
 import time
 
@@ -107,7 +108,7 @@ class account_bank_statement(osv.osv):
     def _all_lines_reconciled(self, cr, uid, ids, name, args, context=None):
         res = {}
         for statement in self.browse(cr, uid, ids, context=context):
-            res[statement.id] = all([line.journal_entry_id.id for line in statement.line_ids])
+            res[statement.id] = all([line.journal_entry_id.id or line.account_id.id for line in statement.line_ids])
         return res
 
     _order = "date desc, id desc"
@@ -548,7 +549,9 @@ class account_bank_statement_line(osv.osv):
                 return [mv_line]
 
         # How to compare statement line amount and move lines amount
+        precision_digits = self.pool.get('decimal.precision').precision_get(cr, uid, 'Account')
         currency_id = st_line.currency_id.id or st_line.journal_id.currency.id
+        # NB : amount can't be == 0 ; so float precision is not an issue for amount > 0 or amount < 0
         amount = st_line.amount_currency or st_line.amount
         domain = [('reconcile_partial_id', '=', False)]
         if currency_id:
@@ -562,8 +565,8 @@ class account_bank_statement_line(osv.osv):
         else:
             amount_field = 'amount_currency'
 
-        # Look for an matching amount
-        domain_exact_amount = domain + [(amount_field, '=', (sign * amount))]
+        # Look for a matching amount
+        domain_exact_amount = domain + [(amount_field, '=', float_round(sign * amount, precision_digits=precision_digits))]
         match_id = self.get_move_lines_for_reconciliation(cr, uid, st_line, excluded_ids=excluded_ids, offset=0, limit=1, additional_domain=domain_exact_amount)
         if match_id:
             return match_id
@@ -584,10 +587,10 @@ class account_bank_statement_line(osv.osv):
         ret = []
         total = 0
         for line in mv_lines:
-            if total + abs(line['debit'] - line['credit']) <= abs(amount):
+            total += abs(line['debit'] - line['credit'])
+            if float_compare(total, abs(amount), precision_digits=precision_digits) != 1:
                 ret.append(line)
-                total += abs(line['debit'] - line['credit'])
-            if total >= abs(amount):
+            else:
                 break
         return ret
 
@@ -606,15 +609,21 @@ class account_bank_statement_line(osv.osv):
         if additional_domain is None:
             additional_domain = []
         # Make domain
-        domain = additional_domain + [('reconcile_id', '=', False),
-                                      ('state', '=', 'valid'),
-                                      ('account_id.reconcile', '=', True)]
+        domain = additional_domain + [
+            ('reconcile_id', '=', False),
+            ('state', '=', 'valid'),
+            ('account_id.reconcile', '=', True)
+        ]
         if st_line.partner_id.id:
             domain += [('partner_id', '=', st_line.partner_id.id)]
         if excluded_ids:
             domain.append(('id', 'not in', excluded_ids))
         if str:
-            domain += ['|', ('move_id.name', 'ilike', str), ('move_id.ref', 'ilike', str)]
+            domain += [
+                '|', ('move_id.name', 'ilike', str),
+                '|', ('move_id.ref', 'ilike', str),
+                ('date_maturity', 'like', str),
+            ]
             if not st_line.partner_id.id:
                 domain.insert(-1, '|', )
                 domain.append(('partner_id.name', 'ilike', str))
@@ -816,7 +825,7 @@ class account_bank_statement_line(osv.osv):
     # Unfortunately, that spawns a "no access rights" error ; it shouldn't.
     def _needaction_domain_get(self, cr, uid, context=None):
         user = self.pool.get("res.users").browse(cr, uid, uid)
-        return ['|', ('company_id', '=', False), ('company_id', 'child_of', [user.company_id.id]), ('journal_entry_id', '=', False)]
+        return ['|', ('company_id', '=', False), ('company_id', 'child_of', [user.company_id.id]), ('journal_entry_id', '=', False), ('account_id', '=', False)]
 
     _order = "statement_id desc, sequence"
     _name = "account.bank.statement.line"
@@ -850,13 +859,13 @@ class account_statement_operation_template(osv.osv):
     _description = "Preset for the lines that can be created in a bank statement reconciliation"
     _columns = {
         'name': fields.char('Button Label', required=True),
-        'account_id': fields.many2one('account.account', 'Account', ondelete='cascade', domain=[('type','!=','view')]),
+        'account_id': fields.many2one('account.account', 'Account', ondelete='cascade', domain=[('type', 'not in', ('view', 'closed', 'consolidation'))]),
         'label': fields.char('Label'),
         'amount_type': fields.selection([('fixed', 'Fixed'),('percentage_of_total','Percentage of total amount'),('percentage_of_balance', 'Percentage of open balance')],
                                    'Amount type', required=True),
         'amount': fields.float('Amount', digits_compute=dp.get_precision('Account'), help="The amount will count as a debit if it is negative, as a credit if it is positive (except if amount type is 'Percentage of open balance').", required=True),
-        'tax_id': fields.many2one('account.tax', 'Tax', ondelete='cascade'),
-        'analytic_account_id': fields.many2one('account.analytic.account', 'Analytic Account', ondelete='cascade'),
+        'tax_id': fields.many2one('account.tax', 'Tax', ondelete='restrict', domain=[('type_tax_use', 'in', ['purchase', 'all']), ('parent_id', '=', False)]),
+        'analytic_account_id': fields.many2one('account.analytic.account', 'Analytic Account', ondelete='set null', domain=[('type','!=','view'), ('state','not in',('close','cancelled'))]),
     }
     _defaults = {
         'amount_type': 'percentage_of_balance',
