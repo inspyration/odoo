@@ -195,7 +195,8 @@ class BlogPost(osv.Model):
             msg_ids = self.pool['mail.message'].search(cr, SUPERUSER_ID, [
                 ('res_id', '=', id),
                 ('model', '=', self._name),
-                '|', ('path', 'not in', existing), ('path', '=', False)
+                ('path', 'not in', existing),
+                ('path', '!=', False)
             ], context=context)
             self.pool['mail.message'].unlink(cr, SUPERUSER_ID, msg_ids, context=context)
 
@@ -242,6 +243,8 @@ class BlogPost(osv.Model):
         return post_id
 
     def write(self, cr, uid, ids, vals, context=None):
+        if isinstance(ids, (int, long)):
+            ids = [ids]
         if 'content' in vals:
             vals['content'] = self._postproces_content(cr, uid, ids[0], vals['content'], context=context)
         result = super(BlogPost, self).write(cr, uid, ids, vals, context)

@@ -152,7 +152,6 @@ class website_sale(http.Controller):
                     ('description_sale', 'ilike', srch), ('product_variant_ids.default_code', 'ilike', srch)]
         if category:
             domain += [('public_categ_ids', 'child_of', int(category))]
-
         attrib_list = request.httprequest.args.getlist('attrib')
         attrib_values = [map(int,v.split("-")) for v in attrib_list if v]
         attrib_set = set([v[1] for v in attrib_values])
@@ -190,6 +189,8 @@ class website_sale(http.Controller):
         if category:
             category = pool['product.public.category'].browse(cr, uid, int(category), context=context)
             url = "/shop/category/%s" % slug(category)
+        if attrib_list:
+            post['attrib'] = attrib_list
         pager = request.website.pager(url=url, total=product_count, page=page, step=PPG, scope=7, url_args=post)
         product_ids = product_obj.search(cr, uid, domain, limit=PPG, offset=pager['offset'], order='website_published desc, website_sequence desc', context=context)
         products = product_obj.browse(cr, uid, product_ids, context=context)
@@ -817,6 +818,9 @@ class website_sale(http.Controller):
             composer_values.update(composer_obj.onchange_template_id(cr, SUPERUSER_ID, None, *template_values, context=context).get('value', {}))
             if not composer_values.get('email_from') and uid == request.website.user_id.id:
                 composer_values['email_from'] = request.website.user_id.company_id.email
+            for key in ['attachment_ids', 'partner_ids']:
+                if composer_values.get(key):
+                    composer_values[key] = [(6, 0, composer_values[key])]
             composer_id = composer_obj.create(cr, SUPERUSER_ID, composer_values, context=email_ctx)
             composer_obj.send_mail(cr, SUPERUSER_ID, [composer_id], context=email_ctx)
 
