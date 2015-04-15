@@ -112,6 +112,11 @@ class Website(openerp.addons.web.controllers.main.Home):
             pages = 0
             first_page = None
             locs = request.website.enumerate_pages()
+
+            # Quick and dirty fix
+            locs = [l for l in locs if not l["loc"].startswith(u"/web/")]
+            # End of fix
+
             while True:
                 start = pages * LOC_PER_SITEMAP
                 values = {
