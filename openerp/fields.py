@@ -176,11 +176,11 @@ class Field(object):
             @api.depends('name')
             def _compute_upper(self):
                 for rec in self:
-                    self.upper = self.name.upper() if self.name else False
+                    rec.upper = rec.name.upper() if rec.name else False
 
             def _inverse_upper(self):
                 for rec in self:
-                    self.name = self.upper.lower() if self.upper else False
+                    rec.name = rec.upper.lower() if rec.upper else False
 
             def _search_upper(self, operator, value):
                 if operator == 'like':
@@ -1054,7 +1054,7 @@ class Float(Field):
     @property
     def digits(self):
         if callable(self._digits):
-            with registry().cursor() as cr:
+            with fields._get_cursor() as cr:
                 return self._digits(cr)
         else:
             return self._digits
@@ -1242,17 +1242,16 @@ class Datetime(Field):
         """
         assert isinstance(timestamp, datetime), 'Datetime instance expected'
         tz_name = record._context.get('tz') or record.env.user.tz
+        utc_timestamp = pytz.utc.localize(timestamp, is_dst=False)  # UTC = no DST
         if tz_name:
             try:
-                utc = pytz.timezone('UTC')
                 context_tz = pytz.timezone(tz_name)
-                utc_timestamp = utc.localize(timestamp, is_dst=False)  # UTC = no DST
                 return utc_timestamp.astimezone(context_tz)
             except Exception:
                 _logger.debug("failed to compute context/client-specific timestamp, "
                               "using the UTC value",
                               exc_info=True)
-        return timestamp
+        return utc_timestamp
 
     @staticmethod
     def from_string(value):
